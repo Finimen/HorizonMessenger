@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Massager Chat</title>
     <style>
+        /* Существующие стили остаются без изменений */
         * {
             margin: 0;
             padding: 0;
@@ -20,12 +21,12 @@
         }
 
         .container {
-            max-width: 800px;
+            max-width: 1200px;
             margin: 0 auto;
             padding: 20px;
             flex: 1;
             display: flex;
-            flex-direction: column;
+            gap: 20px;
         }
 
         .auth-section, .chat-section {
@@ -33,7 +34,6 @@
             padding: 20px;
             border-radius: 10px;
             box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-            margin-bottom: 20px;
         }
 
         .hidden {
@@ -62,7 +62,7 @@
             color: #666;
         }
 
-        input {
+        input, select {
             width: 100%;
             padding: 10px;
             border: 1px solid #ddd;
@@ -82,6 +82,42 @@
 
         button:hover {
             background-color: #0056b3;
+        }
+
+        .chat-management {
+            flex: 0 0 300px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .chat-list {
+            flex: 1;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            padding: 15px;
+            margin-bottom: 15px;
+            overflow-y: auto;
+            max-height: 400px;
+            background-color: #fafafa;
+        }
+
+        .chat-item {
+            padding: 10px;
+            margin-bottom: 10px;
+            background-color: white;
+            border-radius: 5px;
+            cursor: pointer;
+            border: 1px solid #ddd;
+        }
+
+        .chat-item:hover {
+            background-color: #f8f9fa;
+        }
+
+        .chat-item.active {
+            background-color: #007bff;
+            color: white;
+            border-color: #0056b3;
         }
 
         .chat-container {
@@ -154,13 +190,39 @@
             font-size: 14px;
             margin-top: 5px;
         }
+
+        .create-chat-form {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 15px;
+        }
+
+        .member-input {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+
+        .member-input input {
+            flex: 1;
+        }
+
+        .member-tag {
+            display: inline-block;
+            background-color: #007bff;
+            color: white;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            margin: 2px;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>💬 Massager Chat</h1>
         
-        <!-- Authentication Section -->
         <div id="authSection" class="auth-section">
             <div id="loginForm">
                 <h2>Login</h2>
@@ -197,18 +259,45 @@
             </div>
         </div>
 
-        <!-- Chat Section -->
-        <div id="chatSection" class="chat-section hidden">
-            <div class="user-info">
-                Welcome, <span id="currentUser"></span>! 
-                <button onclick="logout()" style="background-color: #dc3545; margin-left: 10px;">Logout</button>
+        <div id="chatSection" class="chat-section hidden" style="display: flex; width: 100%; gap: 20px;">
+            <div class="chat-management">
+                <div class="user-info">
+                    Welcome, <span id="currentUser"></span>! 
+                    <button onclick="logout()" style="background-color: #dc3545; margin-left: 10px;">Logout</button>
+                </div>
+                
+                <div class="create-chat-form">
+                    <h3>Create New Chat</h3>
+                    <div class="form-group">
+                        <label for="chatName">Chat Name:</label>
+                        <input type="text" id="chatName" placeholder="Enter chat name">
+                    </div>
+                    <div class="form-group">
+                        <label>Add Members:</label>
+                        <div class="member-input">
+                            <input type="text" id="memberInput" placeholder="Enter username">
+                            <button onclick="addMember()">Add</button>
+                        </div>
+                        <div id="membersList"></div>
+                    </div>
+                    <button onclick="createChat()">Create Chat</button>
+                    <div id="createChatMessage"></div>
+                </div>
+
+                <h3>Your Chats</h3>
+                <div id="chatList" class="chat-list">
+                </div>
             </div>
-            
-            <div class="chat-container">
+
+            <div class="chat-container" style="flex: 1;">
+                <div class="user-info" id="currentChatInfo">
+                    Select a chat to start messaging
+                </div>
+                
                 <div id="messages" class="messages"></div>
                 <div class="message-input">
-                    <input type="text" id="messageInput" placeholder="Type your message..." onkeypress="handleKeyPress(event)">
-                    <button onclick="sendMessage()">Send</button>
+                    <input type="text" id="messageInput" placeholder="Select a chat to send messages" disabled>
+                    <button onclick="sendMessage()" disabled id="sendButton">Send</button>
                 </div>
             </div>
         </div>
@@ -218,8 +307,10 @@
         let ws = null;
         let currentToken = null;
         let currentUsername = null;
+        let currentChatId = null;
+        let currentMembers = [];
+        let userChats = [];
 
-        // Authentication functions
         async function login() {
             const username = document.getElementById('loginUsername').value;
             const password = document.getElementById('loginPassword').value;
@@ -245,6 +336,7 @@
                     currentToken = data.token;
                     currentUsername = username;
                     showChat();
+                    loadUserChats();
                     connectWebSocket();
                 } else {
                     showMessage(messageDiv, data.error || 'Login failed', 'error');
@@ -293,86 +385,357 @@
             }
             currentToken = null;
             currentUsername = null;
+            currentChatId = null;
             showAuth();
             document.getElementById('messages').innerHTML = '';
+            document.getElementById('chatList').innerHTML = '';
         }
 
-        // WebSocket functions
-        function connectWebSocket() {
-            if (!currentToken) {
-                console.error('No token available');
+        async function loadUserChats() {
+    if (!currentToken) {
+        console.log('No token available for loading chats');
+        return;
+    }
+
+    try {
+        const response = await fetch('/api/chats', {
+            headers: {
+                'Authorization': `Bearer ${currentToken}`
+            }
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+
+        const data = await response.json();
+        console.log('Loaded chats:', data.chats);
+        
+        if (data.chats && Array.isArray(data.chats)) {
+            userChats = data.chats; 
+            displayChats(userChats);
+        } else {
+            console.warn('Invalid chats data structure:', data);
+            userChats = [];
+            displayChats([]);
+        }
+    } catch (error) {
+        console.error('Failed to load chats:', error);
+        userChats = []; 
+        displayChats([]);
+    }
+}
+    
+function joinAllChats() {
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+        console.log('WebSocket not ready, retrying in 1 second...');
+        setTimeout(joinAllChats, 1000);
+        return;
+    }
+    
+    console.log('Joining all chats:', userChats.length);
+    userChats.forEach(chat => {
+        const joinMessage = {
+            type: 'join_chat',
+            chat_id: chat.id,
+            sender: currentUsername
+        };
+        ws.send(JSON.stringify(joinMessage));
+        console.log('Joined chat:', chat.id, chat.name);
+    });
+}
+
+        function displayChats(chats) {
+            const chatList = document.getElementById('chatList');
+            chatList.innerHTML = '';
+
+            console.log('Displaying chats:', chats);
+
+            if (chats.length === 0) {
+                chatList.innerHTML = '<div style="text-align: center; color: #666;">No chats yet</div>';
                 return;
             }
 
+            chats.forEach(chat => {
+                const chatItem = document.createElement('div');
+                chatItem.className = 'chat-item';
+                chatItem.textContent = chat.name || `Chat with ${chat.members?.join(', ') || 'others'}`;
+                chatItem.onclick = () => selectChat(chat.id, chat.name);
+                chatList.appendChild(chatItem);
+            });
+        }
+
+        function selectChat(chatId, chatName) {
+            currentChatId = chatId;
+            
+            document.querySelectorAll('.chat-item').forEach(item => {
+                item.classList.remove('active');
+            });
+            event.target.classList.add('active');
+            
+            document.getElementById('currentChatInfo').textContent = `Chat: ${chatName}`;
+            document.getElementById('messageInput').placeholder = `Message in ${chatName}...`;
+            document.getElementById('messageInput').disabled = false;
+            document.getElementById('sendButton').disabled = false;
+            
+            joinChat(chatId);
+            
+            document.getElementById('messages').innerHTML = '';
+            loadChatMessages(chatId);
+        }
+
+        async function loadChatMessages(chatId) {
+            try {
+                const response = await fetch(`/api/chats/${chatId}/messages?limit=50`, {
+                    headers: {
+                        'Authorization': `Bearer ${currentToken}`
+                    }
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    displayMessages(data.messages || []);
+                }
+            } catch (error) {
+                console.error('Failed to load messages:', error);
+            }
+        }
+
+        function displayMessages(messages) {
+            const messagesDiv = document.getElementById('messages');
+            messagesDiv.innerHTML = '';
+
+            messages.forEach(message => {
+                const isOwn = message.sender_id === currentUsername;
+                addMessage(message.sender_id, message.content, isOwn ? 'own' : 'other');
+            });
+        }
+
+        function addMember() {
+            const memberInput = document.getElementById('memberInput');
+            const member = memberInput.value.trim();
+            
+            if (member && !currentMembers.includes(member)) {
+                currentMembers.push(member);
+                updateMembersList();
+                memberInput.value = '';
+            }
+        }
+
+        function updateMembersList() {
+            const membersList = document.getElementById('membersList');
+            membersList.innerHTML = currentMembers.map(member => 
+                `<span class="member-tag">${member}</span>`
+            ).join('');
+        }
+
+        async function testChatAPI() {
+            if (!currentToken) {
+                console.log('No token available');
+                return;
+            }
+
+            try {
+                console.log('Testing chats API...');
+                
+                const response = await fetch('/api/chats', {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${currentToken}`
+                    }
+                });
+                
+                console.log('Chats endpoint status:', response.status);
+                console.log('Chats endpoint content-type:', response.headers.get('content-type'));
+                
+                const text = await response.text();
+                console.log('Chats endpoint response (first 200 chars):', text.substring(0, 200));
+                
+            } catch (error) {
+                console.error('Chat API test failed:', error);
+            }
+            }
+
+        async function createChat() {
+            const chatName = document.getElementById('chatName').value.trim();
+            const messageDiv = document.getElementById('createChatMessage');
+
+            if (!chatName) {
+                showMessage(messageDiv, 'Please enter chat name', 'error');
+                return;
+            }
+
+            if (currentMembers.length === 0) {
+                showMessage(messageDiv, 'Please add at least one member', 'error');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/chats', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${currentToken}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        chat_name: chatName,
+                        member_ids: currentMembers
+                    })
+                });
+
+                const contentType = response.headers.get('content-type');
+                let data;
+                
+                if (contentType && contentType.includes('application/json')) {
+                    data = await response.json();
+                } else {
+                    const text = await response.text();
+                    throw new Error(`Server returned ${response.status}: ${text.substring(0, 100)}`);
+                }
+
+                if (response.ok) {
+                    showMessage(messageDiv, 'Chat created successfully!', 'success');
+                    
+                    const membersCopy = [...currentMembers]; 
+                    
+                    document.getElementById('chatName').value = '';
+                    currentMembers = [];
+                    updateMembersList();
+                    
+                    const newChat = {
+                        id: data.chat_id,
+                        name: chatName,
+                        members: membersCopy 
+                    };
+                    userChats.push(newChat);
+                    displayChats(userChats);
+                    
+                    setTimeout(() => {
+                        joinChat(newChat.id);
+                    }, 100);
+                    
+                } else {
+                    showMessage(messageDiv, data.error || `Failed to create chat: ${response.status}`, 'error');
+                }
+            } catch (error) {
+                console.error('Create chat error:', error);
+                showMessage(messageDiv, `Error: ${error.message}`, 'error');
+            }
+        }
+
+        function notifyMembersAboutNewChat(chat, members) {
+            if (!ws || ws.readyState !== WebSocket.OPEN) return;
+            
+            const notification = {
+                type: 'chat_created',
+                chat_id: chat.id,
+                chat_name: chat.name,
+                members: members,
+                created_by: currentUsername
+            };
+            
+            ws.send(JSON.stringify(notification));
+            console.log('Notified members about new chat:', members);
+        }
+
+        function connectWebSocket() {
+            if (!currentToken) return;
+
             const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
             const wsUrl = `${protocol}//${window.location.host}/api/ws?token=${currentToken}`;
-            
-            console.log('Connecting to WebSocket:', wsUrl);
             
             ws = new WebSocket(wsUrl);
 
             ws.onopen = function() {
                 console.log('WebSocket connected successfully');
                 addMessage('System', 'Connected to chat', 'other');
+                
+                joinAllChats();
             };
 
             ws.onmessage = function(event) {
                 console.log('WebSocket message received:', event.data);
                 try {
                     const message = JSON.parse(event.data);
-                    addMessage(message.sender || 'Unknown', message.text, 'other');
+                    
+                    if (message.type === 'message') {
+                        if (message.sender !== currentUsername) {
+                            if (currentChatId && message.chat_id === currentChatId) {
+                                addMessage(message.sender, message.content, 'other');
+                            }
+                        }
+                    } 
+                    else if (message.type === 'chat_created') {
+                        if (message.members && message.members.includes(currentUsername)) {
+                            console.log('You were added to new chat:', message.chat_name);
+                            
+                            const newChat = {
+                                id: message.chat_id,
+                                name: message.chat_name,
+                                members: message.members
+                            };
+                            
+                            if (!userChats.some(chat => chat.id === newChat.id)) {
+                                userChats.push(newChat);
+                                displayChats(userChats);
+                                
+                                setTimeout(() => joinChat(newChat.id), 100);
+                                
+                                showNotification(`You were added to chat: "${message.chat_name}" by ${message.created_by}`);
+                            }
+                        }
+                    }
                 } catch (error) {
-                    addMessage('System', event.data, 'other');
+                    console.log('System message:', event.data);
                 }
             };
 
             ws.onclose = function(event) {
-                console.log('WebSocket disconnected:', event.code, event.reason);
-                addMessage('System', 'Disconnected from chat: ' + event.reason, 'other');
+                console.log('WebSocket disconnected');
+                addMessage('System', 'Disconnected from chat', 'other');
             };
 
             ws.onerror = function(error) {
                 console.error('WebSocket error:', error);
-                addMessage('System', 'Connection error', 'error');
             };
         }
 
-        // Добавьте функцию для проверки токена
-        async function testToken() {
-            if (!currentToken) {
-                console.log('No token available');
-                return;
-            }
+        function joinChat(chatId) {
+            if (!ws || ws.readyState !== WebSocket.OPEN) return;
             
-            try {
-                const response = await fetch('/api/auth/validate-test', {
-                    method: 'POST',
-                    headers: {
-                        'Authorization': `Bearer ${currentToken}`,
-                        'Content-Type': 'application/json'
-                    }
-                });
-                console.log('Token validation response:', response.status, await response.text());
-            } catch (error) {
-                console.error('Token validation error:', error);
-            }
+            const joinMessage = {
+                type: 'join_chat',
+                chat_id: chatId,
+                sender: currentUsername
+            };
+            ws.send(JSON.stringify(joinMessage));
+            console.log('Joined chat:', chatId);
+        }
+
+        function showNotification(message) {
+            console.log('Notification:', message);
+            alert(`📢 ${message}`); // Временное решение, можно заменить на toast-уведомление
         }
 
         function sendMessage() {
+            if (!currentChatId || !ws || ws.readyState !== WebSocket.OPEN) return;
+
             const input = document.getElementById('messageInput');
             const message = input.value.trim();
 
-            if (!message || !ws || ws.readyState !== WebSocket.OPEN) return;
+            if (!message) return;
 
             const messageData = {
                 type: 'message',
-                text: message,
+                chat_id: currentChatId,
+                content: message,
                 sender: currentUsername,
                 timestamp: new Date().toISOString()
             };
 
-            ws.send(JSON.stringify(messageData));
             addMessage(currentUsername, message, 'own');
+            
+            ws.send(JSON.stringify(messageData));
             input.value = '';
         }
 
@@ -382,16 +745,17 @@
             }
         }
 
-        // UI functions
         function showAuth() {
             document.getElementById('authSection').classList.remove('hidden');
             document.getElementById('chatSection').classList.add('hidden');
         }
 
         function showChat() {
-            document.getElementById('authSection').classList.add('hidden');
+             document.getElementById('authSection').classList.add('hidden');
             document.getElementById('chatSection').classList.remove('hidden');
             document.getElementById('currentUser').textContent = currentUsername;
+    
+            setTimeout(() => testChatAPI(), 1000);
         }
 
         function showLoginForm() {
@@ -435,7 +799,6 @@
             document.getElementById('registerMessage').textContent = '';
         }
 
-        // Initialize
         document.getElementById('loginUsername').focus();
     </script>
 </body>

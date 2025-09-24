@@ -1,6 +1,7 @@
 package websocket
 
 import (
+	"encoding/json"
 	"log/slog"
 	"net/http"
 	"sync"
@@ -17,14 +18,16 @@ var Upgrader = websocket.Upgrader{
 }
 
 type Client struct {
-	Hub    *Hub
-	Conn   *websocket.Conn
-	Send   chan []byte
-	UserID string
+	Hub     *Hub
+	Conn    *websocket.Conn
+	Send    chan []byte
+	UserID  string
+	ChatIDs map[string]bool
 }
 
 type Hub struct {
-	Clients    map[*Client]bool
+	Clients    map[string]*Client
+	ChatRooms  map[string]map[string]bool
 	Broadcast  chan Message
 	Register   chan *Client
 	Unregister chan *Client
@@ -34,17 +37,25 @@ type Hub struct {
 
 func NewHub(logger *slog.Logger) *Hub {
 	return &Hub{
+		Clients:    make(map[string]*Client),
+		ChatRooms:  make(map[string]map[string]bool),
 		Broadcast:  make(chan Message),
 		Register:   make(chan *Client),
 		Unregister: make(chan *Client),
-		Clients:    make(map[*Client]bool),
 		Logger:     logger,
 	}
 }
 
 type Message struct {
-	Sender  *Client
-	Content []byte
+	Type      string `json:"type"`
+	ChatID    string `json:"chat_id,omitempty"`
+	Sender    string `json:"sender,omitempty"`
+	Content   string `json:"content,omitempty"`
+	Timestamp string `json:"timestamp,omitempty"`
+
+	ChatName  string   `json:"chat_name,omitempty"`
+	Members   []string `json:"members,omitempty"`
+	CreatedBy string   `json:"created_by,omitempty"`
 }
 
 func (h *Hub) Run() {
@@ -52,34 +63,74 @@ func (h *Hub) Run() {
 		select {
 		case client := <-h.Register:
 			h.Mutex.Lock()
-			h.Clients[client] = true
+			h.Clients[client.UserID] = client
+			if client.ChatIDs == nil {
+				client.ChatIDs = make(map[string]bool)
+			}
 			h.Mutex.Unlock()
 			h.Logger.Info("Client registered", "userID", client.UserID)
 
 		case client := <-h.Unregister:
 			h.Mutex.Lock()
-			if _, ok := h.Clients[client]; ok {
-				delete(h.Clients, client)
-				close(client.Send)
+			delete(h.Clients, client.UserID)
+			for chatID := range client.ChatIDs {
+				if users, ok := h.ChatRooms[chatID]; ok {
+					delete(users, client.UserID)
+					if len(users) == 0 {
+						delete(h.ChatRooms, chatID)
+					}
+				}
 			}
+			close(client.Send)
 			h.Mutex.Unlock()
 			h.Logger.Info("Client unregistered", "userID", client.UserID)
 
 		case message := <-h.Broadcast:
 			h.Mutex.RLock()
-			for client := range h.Clients {
-				if client != message.Sender {
-					select {
-					case client.Send <- message.Content:
-					default:
-						close(client.Send)
-						delete(h.Clients, client)
+
+			switch message.Type {
+			case "join_chat":
+				if h.ChatRooms[message.ChatID] == nil {
+					h.ChatRooms[message.ChatID] = make(map[string]bool)
+				}
+				h.ChatRooms[message.ChatID][message.Sender] = true
+
+				if client, ok := h.Clients[message.Sender]; ok {
+					client.ChatIDs[message.ChatID] = true
+				}
+				h.Logger.Info("User joined chat", "userID", message.Sender, "chatID", message.ChatID)
+
+			case "message":
+				h.Logger.Info("Broadcasting message",
+					"chatID", message.ChatID,
+					"sender", message.Sender,
+					"content", message.Content)
+
+				if users, ok := h.ChatRooms[message.ChatID]; ok {
+					for userID := range users {
+						if client, exists := h.Clients[userID]; exists {
+							select {
+							case client.Send <- mustMarshal(message):
+								h.Logger.Debug("Message sent to user", "userID", userID)
+							default:
+								h.Logger.Warn("Failed to send message to user", "userID", userID)
+								close(client.Send)
+								delete(h.Clients, userID)
+							}
+						}
 					}
+				} else {
+					h.Logger.Warn("Chat room not found", "chatID", message.ChatID)
 				}
 			}
 			h.Mutex.RUnlock()
 		}
 	}
+}
+
+func mustMarshal(msg Message) []byte {
+	data, _ := json.Marshal(msg)
+	return data
 }
 
 func (c *Client) ReadPump() {
@@ -92,15 +143,51 @@ func (c *Client) ReadPump() {
 		_, message, err := c.Conn.ReadMessage()
 		if err != nil {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
-				c.Hub.Logger.Error("Websocet error", "error", err)
+				c.Hub.Logger.Error("Websocket error", "error", err)
 			}
 			break
 		}
 
-		c.Hub.Broadcast <- Message{
-			Sender:  c,
-			Content: message,
+		var msg Message
+		if err := json.Unmarshal(message, &msg); err != nil {
+			c.Hub.Logger.Error("Failed to parse message", "error", err)
+			continue
 		}
+
+		msg.Sender = c.UserID
+
+		switch msg.Type {
+		case "join_chat":
+			c.Hub.Logger.Info("Join chat request", "userID", c.UserID, "chatID", msg.ChatID)
+		case "message":
+			c.Hub.Logger.Info("New message", "userID", c.UserID, "chatID", msg.ChatID, "content", msg.Content)
+		}
+
+		c.Hub.Broadcast <- msg
+	}
+}
+
+func (h *Hub) BroadcastToUser(userID string, message map[string]interface{}) {
+	h.Mutex.RLock()
+	defer h.Mutex.RUnlock()
+
+	data, err := json.Marshal(message)
+	if err != nil {
+		h.Logger.Error("Failed to marshal message", "error", err)
+		return
+	}
+
+	if client, exists := h.Clients[userID]; exists {
+		select {
+		case client.Send <- data:
+			h.Logger.Debug("Message sent to user", "userID", userID, "type", message["type"])
+		default:
+			h.Logger.Warn("Client channel full, closing connection", "userID", userID)
+			close(client.Send)
+			delete(h.Clients, userID)
+		}
+	} else {
+		h.Logger.Debug("User not connected", "userID", userID)
 	}
 }
 

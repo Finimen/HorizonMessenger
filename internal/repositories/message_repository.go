@@ -1,17 +1,25 @@
 package repositories
 
-import "context"
+import (
+	"context"
+	"database/sql"
+	"massager/internal/models"
+)
 
 type MessageRepository struct {
+	db *sql.DB
 }
 
-type Message struct {
+func NewMessageRepository(db *sql.DB) *MessageRepository {
+	return &MessageRepository{db: db}
 }
 
-func (r *MessageRepository) Create(context.Context, string, string, string) error {
+func (r *MessageRepository) CreateMessage(ctx context.Context, chatID, senderID, content string) error {
+	// Реализация сохранения сообщения
 	return nil
 }
 
-func (r *MessageRepository) GetConversation(context.Context, string, string, int, int) ([]Message, error) {
-	return nil, nil
+func (r *MessageRepository) GetMessages(ctx context.Context, chatID string, limit, offset int) ([]models.Message, error) {
+	// Реализация получения сообщений
+	return []models.Message{}, nil
 }

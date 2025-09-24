@@ -7,7 +7,9 @@ import (
 )
 
 type RepositoryAdapter struct {
-	User *UserRepository
+	User    *UserRepository
+	Chat    *ChatRepository
+	Message *MessageRepository
 }
 
 func NewRepositoryAdapter(path string) (*RepositoryAdapter, error) {
@@ -25,6 +27,10 @@ func NewRepositoryAdapter(path string) (*RepositoryAdapter, error) {
 	if e != nil {
 		return nil, e
 	}
+	var chatRepo = NewMessageRepository(db)
+	if e != nil {
+		return nil, e
+	}
 
-	return &RepositoryAdapter{User: userRepo}, nil
+	return &RepositoryAdapter{User: userRepo, Message: chatRepo}, nil
 }

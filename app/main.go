@@ -64,14 +64,20 @@ func main() {
 		return
 	}
 
+	wsHub := websocket.NewHub(logger)
+	go wsHub.Run()
+
 	var rateLimiter = NewRateLimiter(cfg.RateLimit.MaxRequests, cfg.RateLimit.Window)
 
 	var authService = services.NewAuthService(repo.User, &services.BcryptHasher{}, adapters.NewRedisTokenRepository(redisClient), []byte(cfg.JWT.SecretKey), logger)
+	var chatService = services.NewChatService(repo.Chat, repo.Message, wsHub, repo.User, logger)
+
+	ctx := context.Background()
+	chatService.CreateChat(ctx, "General Chat", []string{"user1", "user2"})
+	chatService.CreateChat(ctx, "Random Chat", []string{"user1", "user3"})
 
 	var authHandler = handlers.NewAuthHandler(authService, logger)
-
-	wsHub := websocket.NewHub(logger)
-	go wsHub.Run()
+	var chatHandler = handlers.NewChatHandler(chatService, logger)
 
 	wsHandler := handlers.NewWebSocketHandler(wsHub, authService, logger)
 
@@ -88,6 +94,17 @@ func main() {
 			authGroup.POST("/register", authHandler.Register)
 			authGroup.POST("/login", authHandler.Login)
 			authGroup.POST("/logout", authHandler.Logout)
+		}
+
+		chatsGroup := api.Group("/chats")
+		chatsGroup.Use(authHandler.AuthMiddleware())
+		{
+			chatsGroup.POST("", chatHandler.CreateChat)
+			chatsGroup.GET("", chatHandler.GetUserChats)
+			chatsGroup.GET("/:chatId/messages", func(c *gin.Context) {
+				// Пока заглушка для получения сообщений чата
+				c.JSON(200, gin.H{"messages": []string{}})
+			})
 		}
 
 		api.GET("/ws", wsHandler.HandleWebSocket)
