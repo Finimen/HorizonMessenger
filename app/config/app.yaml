@@ -1,0 +1,22 @@
+# config/app.yaml
+environment:
+  current: "development" 
+
+server:
+  port: ":8080"
+  cookiesecure: false
+
+database:
+  path: "./burgers.db"
+
+redis:
+  addr: "localhost:6379"
+  password: ""
+  db: 0
+
+jwt:
+  secretkey: "ultra_super_strong_secret_key_XFJ12JTPM"
+
+ratelimit:
+  maxrequests: 100
+  window: 1m 

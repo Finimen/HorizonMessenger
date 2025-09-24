@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Massager Chat</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f0f2f5;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .auth-section, .chat-section {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 20px;
+        }
+
+        h2 {
+            margin-bottom: 15px;
+            color: #555;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #666;
+        }
+
+        input {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        button:hover {
+            background-color: #0056b3;
+        }
+
+        .chat-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .messages {
+            flex: 1;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            padding: 15px;
+            margin-bottom: 15px;
+            overflow-y: auto;
+            max-height: 400px;
+            background-color: #fafafa;
+        }
+
+        .message {
+            margin-bottom: 10px;
+            padding: 8px 12px;
+            border-radius: 15px;
+            max-width: 70%;
+        }
+
+        .message.own {
+            background-color: #007bff;
+            color: white;
+            margin-left: auto;
+            text-align: right;
+        }
+
+        .message.other {
+            background-color: #e9ecef;
+            color: #333;
+        }
+
+        .message-sender {
+            font-size: 12px;
+            font-weight: bold;
+            margin-bottom: 3px;
+        }
+
+        .message-input {
+            display: flex;
+            gap: 10px;
+        }
+
+        .message-input input {
+            flex: 1;
+        }
+
+        .user-info {
+            background-color: #e9ecef;
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 15px;
+            text-align: center;
+        }
+
+        .error {
+            color: #dc3545;
+            font-size: 14px;
+            margin-top: 5px;
+        }
+
+        .success {
+            color: #28a745;
+            font-size: 14px;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>💬 Massager Chat</h1>
+        
+        <!-- Authentication Section -->
+        <div id="authSection" class="auth-section">
+            <div id="loginForm">
+                <h2>Login</h2>
+                <div class="form-group">
+                    <label for="loginUsername">Username:</label>
+                    <input type="text" id="loginUsername" placeholder="Enter your username">
+                </div>
+                <div class="form-group">
+                    <label for="loginPassword">Password:</label>
+                    <input type="password" id="loginPassword" placeholder="Enter your password">
+                </div>
+                <button onclick="login()">Login</button>
+                <button onclick="showRegisterForm()" style="background-color: #6c757d; margin-left: 10px;">Register</button>
+                <div id="loginMessage"></div>
+            </div>
+
+            <div id="registerForm" class="hidden">
+                <h2>Register</h2>
+                <div class="form-group">
+                    <label for="registerUsername">Username:</label>
+                    <input type="text" id="registerUsername" placeholder="Choose a username">
+                </div>
+                <div class="form-group">
+                    <label for="registerEmail">Email:</label>
+                    <input type="email" id="registerEmail" placeholder="Enter your email">
+                </div>
+                <div class="form-group">
+                    <label for="registerPassword">Password:</label>
+                    <input type="password" id="registerPassword" placeholder="Choose a password">
+                </div>
+                <button onclick="register()">Register</button>
+                <button onclick="showLoginForm()" style="background-color: #6c757d; margin-left: 10px;">Back to Login</button>
+                <div id="registerMessage"></div>
+            </div>
+        </div>
+
+        <!-- Chat Section -->
+        <div id="chatSection" class="chat-section hidden">
+            <div class="user-info">
+                Welcome, <span id="currentUser"></span>! 
+                <button onclick="logout()" style="background-color: #dc3545; margin-left: 10px;">Logout</button>
+            </div>
+            
+            <div class="chat-container">
+                <div id="messages" class="messages"></div>
+                <div class="message-input">
+                    <input type="text" id="messageInput" placeholder="Type your message..." onkeypress="handleKeyPress(event)">
+                    <button onclick="sendMessage()">Send</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let ws = null;
+        let currentToken = null;
+        let currentUsername = null;
+
+        // Authentication functions
+        async function login() {
+            const username = document.getElementById('loginUsername').value;
+            const password = document.getElementById('loginPassword').value;
+            const messageDiv = document.getElementById('loginMessage');
+
+            if (!username || !password) {
+                showMessage(messageDiv, 'Please fill in all fields', 'error');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/auth/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ username, password })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    currentToken = data.token;
+                    currentUsername = username;
+                    showChat();
+                    connectWebSocket();
+                } else {
+                    showMessage(messageDiv, data.error || 'Login failed', 'error');
+                }
+            } catch (error) {
+                showMessage(messageDiv, 'Network error: ' + error.message, 'error');
+            }
+        }
+
+        async function register() {
+            const username = document.getElementById('registerUsername').value;
+            const email = document.getElementById('registerEmail').value;
+            const password = document.getElementById('registerPassword').value;
+            const messageDiv = document.getElementById('registerMessage');
+
+            if (!username || !email || !password) {
+                showMessage(messageDiv, 'Please fill in all fields', 'error');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/auth/register', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ username, password, email })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    showMessage(messageDiv, 'Registration successful! Please login.', 'success');
+                    showLoginForm();
+                } else {
+                    showMessage(messageDiv, data.error || 'Registration failed', 'error');
+                }
+            } catch (error) {
+                showMessage(messageDiv, 'Network error: ' + error.message, 'error');
+            }
+        }
+
+        function logout() {
+            if (ws) {
+                ws.close();
+            }
+            currentToken = null;
+            currentUsername = null;
+            showAuth();
+            document.getElementById('messages').innerHTML = '';
+        }
+
+        // WebSocket functions
+        function connectWebSocket() {
+            if (!currentToken) {
+                console.error('No token available');
+                return;
+            }
+
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${window.location.host}/api/ws?token=${currentToken}`;
+            
+            console.log('Connecting to WebSocket:', wsUrl);
+            
+            ws = new WebSocket(wsUrl);
+
+            ws.onopen = function() {
+                console.log('WebSocket connected successfully');
+                addMessage('System', 'Connected to chat', 'other');
+            };
+
+            ws.onmessage = function(event) {
+                console.log('WebSocket message received:', event.data);
+                try {
+                    const message = JSON.parse(event.data);
+                    addMessage(message.sender || 'Unknown', message.text, 'other');
+                } catch (error) {
+                    addMessage('System', event.data, 'other');
+                }
+            };
+
+            ws.onclose = function(event) {
+                console.log('WebSocket disconnected:', event.code, event.reason);
+                addMessage('System', 'Disconnected from chat: ' + event.reason, 'other');
+            };
+
+            ws.onerror = function(error) {
+                console.error('WebSocket error:', error);
+                addMessage('System', 'Connection error', 'error');
+            };
+        }
+
+        // Добавьте функцию для проверки токена
+        async function testToken() {
+            if (!currentToken) {
+                console.log('No token available');
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/auth/validate-test', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${currentToken}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                console.log('Token validation response:', response.status, await response.text());
+            } catch (error) {
+                console.error('Token validation error:', error);
+            }
+        }
+
+        function sendMessage() {
+            const input = document.getElementById('messageInput');
+            const message = input.value.trim();
+
+            if (!message || !ws || ws.readyState !== WebSocket.OPEN) return;
+
+            const messageData = {
+                type: 'message',
+                text: message,
+                sender: currentUsername,
+                timestamp: new Date().toISOString()
+            };
+
+            ws.send(JSON.stringify(messageData));
+            addMessage(currentUsername, message, 'own');
+            input.value = '';
+        }
+
+        function handleKeyPress(event) {
+            if (event.key === 'Enter') {
+                sendMessage();
+            }
+        }
+
+        // UI functions
+        function showAuth() {
+            document.getElementById('authSection').classList.remove('hidden');
+            document.getElementById('chatSection').classList.add('hidden');
+        }
+
+        function showChat() {
+            document.getElementById('authSection').classList.add('hidden');
+            document.getElementById('chatSection').classList.remove('hidden');
+            document.getElementById('currentUser').textContent = currentUsername;
+        }
+
+        function showLoginForm() {
+            document.getElementById('loginForm').classList.remove('hidden');
+            document.getElementById('registerForm').classList.add('hidden');
+            clearMessages();
+        }
+
+        function showRegisterForm() {
+            document.getElementById('loginForm').classList.add('hidden');
+            document.getElementById('registerForm').classList.remove('hidden');
+            clearMessages();
+        }
+
+        function addMessage(sender, text, type) {
+            const messagesDiv = document.getElementById('messages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${type}`;
+            
+            const senderSpan = document.createElement('div');
+            senderSpan.className = 'message-sender';
+            senderSpan.textContent = sender;
+            
+            const textSpan = document.createElement('div');
+            textSpan.textContent = text;
+            
+            messageDiv.appendChild(senderSpan);
+            messageDiv.appendChild(textSpan);
+            messagesDiv.appendChild(messageDiv);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+
+        function showMessage(element, message, type) {
+            element.textContent = message;
+            element.className = type;
+            setTimeout(() => element.textContent = '', 5000);
+        }
+
+        function clearMessages() {
+            document.getElementById('loginMessage').textContent = '';
+            document.getElementById('registerMessage').textContent = '';
+        }
+
+        // Initialize
+        document.getElementById('loginUsername').focus();
+    </script>
+</body>
+</html>

@@ -1,0 +1,126 @@
+package main
+
+import (
+	"context"
+	"log"
+	"log/slog"
+	"massager/app/config"
+	"massager/internal/adapters"
+	"massager/internal/handlers"
+	"massager/internal/repositories"
+	"massager/internal/services"
+	websocket "massager/internal/websocet"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
+	"github.com/gin-gonic/gin"
+	"github.com/go-redis/redis"
+)
+
+func initRedis(cfg *config.RedisConfig) *redis.Client {
+	var r = redis.NewClient(&redis.Options{
+		Addr:     cfg.Addr,
+		Password: cfg.Password,
+		DB:       cfg.DB,
+	})
+	return r
+}
+
+func initLogger(cfg *config.EnvironmentConfig) *slog.Logger {
+	var logger *slog.Logger
+	if cfg.Current == "development" {
+		logger = slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+			Level: slog.LevelDebug,
+		}))
+	} else {
+		logger = slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+			Level: slog.LevelInfo,
+		}))
+	}
+
+	slog.SetDefault(logger)
+
+	return logger
+}
+
+func main() {
+	var cfg, err = config.LoadConfig()
+	if err != nil {
+		log.Fatal(err)
+		return
+	}
+
+	var logger = initLogger(&cfg.Environment)
+	var redisClient = initRedis(&cfg.Redis)
+
+	var repo *repositories.RepositoryAdapter
+	repo, err = repositories.NewRepositoryAdapter(cfg.Database.Path)
+	if err != nil {
+		logger.Error("Repository initialize error",
+			"error", err.Error())
+		return
+	}
+
+	var rateLimiter = NewRateLimiter(cfg.RateLimit.MaxRequests, cfg.RateLimit.Window)
+
+	var authService = services.NewAuthService(repo.User, &services.BcryptHasher{}, adapters.NewRedisTokenRepository(redisClient), []byte(cfg.JWT.SecretKey), logger)
+
+	var authHandler = handlers.NewAuthHandler(authService, logger)
+
+	wsHub := websocket.NewHub(logger)
+	go wsHub.Run()
+
+	wsHandler := handlers.NewWebSocketHandler(wsHub, authService, logger)
+
+	var eng = gin.Default()
+
+	eng.Static("/static", "./static")
+	eng.LoadHTMLGlob("static/*.html")
+
+	api := eng.Group("/api")
+	api.Use(RateLimitMiddleware(rateLimiter))
+	{
+		authGroup := api.Group("/auth")
+		{
+			authGroup.POST("/register", authHandler.Register)
+			authGroup.POST("/login", authHandler.Login)
+			authGroup.POST("/logout", authHandler.Logout)
+		}
+
+		api.GET("/ws", wsHandler.HandleWebSocket)
+	}
+
+	eng.NoRoute(func(ctx *gin.Context) {
+		ctx.HTML(http.StatusOK, "index.html", nil)
+	})
+
+	var serv = &http.Server{
+		Addr:    cfg.Server.Port,
+		Handler: eng,
+	}
+
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+
+	go func() {
+		log.Printf("Server is starting on http://localhost%s\n", cfg.Server.Port)
+		if err := serv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("listen: http://localhost%s\n", err)
+		}
+	}()
+
+	<-quit
+	log.Println("Shutting down server...")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := serv.Shutdown(ctx); err != nil {
+		log.Fatal("Server forced to shutdown:", err)
+	}
+
+	log.Println("Server exiting")
+}
