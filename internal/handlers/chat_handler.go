@@ -4,6 +4,7 @@ import (
 	"log/slog"
 	"massager/internal/services"
 	"net/http"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 )
@@ -53,4 +54,50 @@ func (h *ChatHandler) GetUserChats(c *gin.Context) {
 
 	h.logger.Info("Returning user chats", "count", len(chats))
 	c.JSON(http.StatusOK, gin.H{"chats": chats})
+}
+
+func (h *ChatHandler) GetChatMessages(c *gin.Context) {
+	chatIDStr := c.Param("chatId")
+	if chatIDStr == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Chat ID is required"})
+		return
+	}
+
+	chatID, err := strconv.Atoi(chatIDStr)
+
+	limit := 50
+	if limitStr := c.Query("limit"); limitStr != "" {
+		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 {
+			limit = l
+		}
+	}
+
+	offset := 0
+	if offsetStr := c.Query("offset"); offsetStr != "" {
+		if o, err := strconv.Atoi(offsetStr); err == nil && o >= 0 {
+			offset = o
+		}
+	}
+
+	if limit > 100 {
+		limit = 100
+	}
+
+	messages, err := h.service.GetChatMessages(c.Request.Context(), chatID, limit, offset)
+	if err != nil {
+		h.logger.Error("Failed to get chat messages", "error", err, "chatID", chatID)
+
+		switch err {
+		case services.ErrChatNotFound:
+			c.JSON(http.StatusNotFound, gin.H{"error": "Chat not found"})
+		case services.ErrInvalidInput:
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input"})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get messages"})
+		}
+		return
+	}
+
+	h.logger.Info("Retrieved chat messages", "chatID", chatID, "count", len(messages))
+	c.JSON(http.StatusOK, gin.H{"messages": messages})
 }

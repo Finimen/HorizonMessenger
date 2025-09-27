@@ -3,7 +3,7 @@ package models
 import "time"
 
 type Chat struct {
-	ID        string    `json:"id"`
+	ID        int       `json:"id"`
 	Name      string    `json:"name"`
 	Members   []string  `json:"members"`
 	CreatedAt time.Time `json:"created_at"`
@@ -11,7 +11,7 @@ type Chat struct {
 
 type Message struct {
 	Type      string `json:"type"`
-	ChatID    string `json:"chat_id,omitempty"`
+	ChatID    int    `json:"chat_id,omitempty"`
 	Sender    string `json:"sender,omitempty"`
 	Content   string `json:"content,omitempty"`
 	Timestamp string `json:"timestamp,omitempty"`

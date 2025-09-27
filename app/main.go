@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"log/slog"
 	"massager/app/config"
@@ -64,13 +65,19 @@ func main() {
 		return
 	}
 
-	wsHub := websocket.NewHub(logger)
+	fmt.Println("IS NILL????", repo == nil)
+	fmt.Println(repo.User == nil, repo.Chat == nil)
+
+	var chatService = services.NewChatService(repo.Chat, repo.Message, repo.User, logger)
+
+	wsHub := websocket.NewHub(chatService, logger)
 	go wsHub.Run()
+
+	chatService.SetWSHub(wsHub)
 
 	var rateLimiter = NewRateLimiter(cfg.RateLimit.MaxRequests, cfg.RateLimit.Window)
 
 	var authService = services.NewAuthService(repo.User, &services.BcryptHasher{}, adapters.NewRedisTokenRepository(redisClient), []byte(cfg.JWT.SecretKey), logger)
-	var chatService = services.NewChatService(repo.Chat, repo.Message, wsHub, repo.User, logger)
 
 	ctx := context.Background()
 	chatService.CreateChat(ctx, "General Chat", []string{"user1", "user2"})
@@ -101,10 +108,7 @@ func main() {
 		{
 			chatsGroup.POST("", chatHandler.CreateChat)
 			chatsGroup.GET("", chatHandler.GetUserChats)
-			chatsGroup.GET("/:chatId/messages", func(c *gin.Context) {
-				// Пока заглушка для получения сообщений чата
-				c.JSON(200, gin.H{"messages": []string{}})
-			})
+			chatsGroup.GET("/:chatId/messages", chatHandler.GetChatMessages)
 		}
 
 		api.GET("/ws", wsHandler.HandleWebSocket)

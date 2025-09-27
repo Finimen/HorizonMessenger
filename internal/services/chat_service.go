@@ -20,15 +20,18 @@ type ChatService struct {
 	wsHub       *websocket.Hub
 }
 
-func NewChatService(chatRepo ports.IChatRepository, messageRepo ports.IMessageRepository, wsHub *websocket.Hub, userRepo ports.IUserRepository, logger *slog.Logger) *ChatService {
+func NewChatService(chatRepo ports.IChatRepository, messageRepo ports.IMessageRepository, userRepo ports.IUserRepository, logger *slog.Logger) *ChatService {
 	return &ChatService{
 		chatRepo:    chatRepo,
 		messageRepo: messageRepo,
 		userRepo:    userRepo,
-		chatStore:   NewMemoryChatStore(),
-		wsHub:       wsHub,
+		chatStore:   NewMemoryChatStore(chatRepo),
 		logger:      logger,
 	}
+}
+
+func (s *ChatService) SetWSHub(wsHub *websocket.Hub) {
+	s.wsHub = wsHub
 }
 
 func (s *ChatService) notifyChatCreated(chat *models.Chat, createdBy string) {
@@ -44,7 +47,6 @@ func (s *ChatService) notifyChatCreated(chat *models.Chat, createdBy string) {
 		"created_by": createdBy,
 	}
 
-	// Отправляем уведомление всем участникам чата (кроме создателя)
 	for _, member := range chat.Members {
 		if member != createdBy {
 			s.wsHub.BroadcastToUser(member, notification)
@@ -54,28 +56,32 @@ func (s *ChatService) notifyChatCreated(chat *models.Chat, createdBy string) {
 	s.logger.Info("notified chat members", "chatID", chat.ID, "members", chat.Members)
 }
 
-func (s *ChatService) CreateChat(ctx context.Context, chatName string, memberIDs []string) (string, error) {
+func (s *ChatService) CreateChat(ctx context.Context, chatName string, memberIDs []string) (int, error) {
 	if chatName == "" {
-		return "", ErrInvalidInput
+		return 0, ErrInvalidInput
 	}
 
 	if len(memberIDs) < 2 {
-		return "", ErrInsufficientMembers
+		return 0, ErrInsufficientMembers
 	}
 
 	for _, userID := range memberIDs {
 		user, err := s.userRepo.GetUserByName(ctx, userID)
 		if err != nil {
 			s.logger.Error("failed to check user existence", "userID", userID, "error", err)
-			return "", ErrUserNotFound
+			return 0, ErrUserNotFound
 		}
 		if user == nil {
 			s.logger.Warn("user not found", "userID", userID)
-			return "", ErrUserNotFound
+			return 0, ErrUserNotFound
 		}
 	}
 
-	chatID := fmt.Sprintf("chat_%s_%d", chatName, time.Now().UnixNano())
+	chatID, err := s.chatRepo.CreateChat(ctx, chatName, memberIDs)
+	if err != nil {
+		s.logger.Error("failed to create chat in repository", "error", err)
+		return 0, err
+	}
 
 	chat := &models.Chat{
 		ID:        chatID,
@@ -85,13 +91,12 @@ func (s *ChatService) CreateChat(ctx context.Context, chatName string, memberIDs
 	}
 
 	var createdBy string
-	for _, member := range memberIDs {
-		createdBy = member
+	if len(memberIDs) > 0 {
+		createdBy = memberIDs[0]
 	}
 
-	s.notifyChatCreated(chat, createdBy)
-
 	s.chatStore.CreateChat(chat)
+	s.notifyChatCreated(chat, createdBy)
 
 	s.logger.Info("chat created successfully", "chatID", chatID, "chatName", chatName, "memberCount", len(memberIDs))
 	return chatID, nil
@@ -112,19 +117,20 @@ func (s *ChatService) GetUserChats(ctx context.Context, userID string) ([]models
 		return nil, ErrUserNotFound
 	}
 
-	chatPointers := s.chatStore.GetUserChats(userID)
+	chatPointers := *s.chatStore.GetUserChats(userID)
 
 	chats := make([]models.Chat, len(chatPointers))
 	for i, chatPtr := range chatPointers {
-		chats[i] = *chatPtr
+		chats[i] = chatPtr
 	}
 
 	s.logger.Info("retrieved user chats", "userID", userID, "chatCount", len(chats))
 	return chats, nil
 }
 
-func (s *ChatService) SendMessage(ctx context.Context, chatID, senderID, content string) error {
-	if chatID == "" || senderID == "" || content == "" {
+func (s *ChatService) SendMessage(ctx context.Context, senderID, content string, chatID int) error {
+	s.logger.Info("SendMessage called", "chatID", chatID, "senderID", senderID, "content", content)
+	if senderID == "" || content == "" {
 		return ErrInvalidInput
 	}
 
@@ -151,7 +157,8 @@ func (s *ChatService) SendMessage(ctx context.Context, chatID, senderID, content
 		return ErrNotChatMember
 	}
 
-	err = s.messageRepo.CreateMessage(ctx, chatID, senderID, content)
+	err = s.messageRepo.CreateMessage(ctx, senderID, content, chatID)
+	s.logger.Info("chat created successfully", "chatID", chatID, "senderID", senderID)
 	if err != nil {
 		s.logger.Error("failed to send message", "chatID", chatID, "senderID", senderID, "error", err)
 		return err
@@ -161,26 +168,14 @@ func (s *ChatService) SendMessage(ctx context.Context, chatID, senderID, content
 	return nil
 }
 
-func (s *ChatService) GetChatMessages(ctx context.Context, chatID string, limit, offset int) ([]models.Message, error) {
-	if chatID == "" {
-		return nil, ErrInvalidInput
-	}
+func (s *ChatService) GetChatMessages(ctx context.Context, chatID, limit, offset int) ([]models.Message, error) {
+	fmt.Println("TRY GET STORED")
 
 	if limit <= 0 {
 		limit = 50
 	}
 	if limit > 100 {
 		limit = 100
-	}
-
-	chat, err := s.chatRepo.GetChatByID(ctx, chatID)
-	if err != nil {
-		s.logger.Error("failed to check chat existence", "chatID", chatID, "error", err)
-		return nil, err
-	}
-	if chat == nil {
-		s.logger.Warn("chat not found", "chatID", chatID)
-		return nil, ErrChatNotFound
 	}
 
 	messages, err := s.messageRepo.GetMessages(ctx, chatID, limit, offset)

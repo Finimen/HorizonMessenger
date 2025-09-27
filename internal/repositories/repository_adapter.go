@@ -2,6 +2,7 @@ package repositories
 
 import (
 	"database/sql"
+	"fmt"
 
 	_ "modernc.org/sqlite"
 )
@@ -18,19 +19,28 @@ func NewRepositoryAdapter(path string) (*RepositoryAdapter, error) {
 		return nil, e
 	}
 
+	fmt.Println("STAGE 1")
+
 	if err := db.Ping(); err != nil {
 		return nil, err
 	}
 
-	var userRepo = NewUserRepository(db)
-	e = userRepo.Init()
-	if e != nil {
-		return nil, e
-	}
-	var chatRepo = NewMessageRepository(db)
-	if e != nil {
+	userRepo, err1 := NewUserRepository(db)
+	if err1 != nil {
 		return nil, e
 	}
 
-	return &RepositoryAdapter{User: userRepo, Message: chatRepo}, nil
+	fmt.Println("STAGE 2")
+
+	var chatRepo, err2 = NewChatRepository(db)
+	if err2 != nil {
+		return nil, e
+	}
+	var messageRepo, err3 = NewMessageRepository(db)
+	if err3 != nil {
+		return nil, e
+	}
+	fmt.Println("STAGE 3")
+
+	return &RepositoryAdapter{User: userRepo, Message: messageRepo, Chat: chatRepo}, nil
 }

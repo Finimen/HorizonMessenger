@@ -15,14 +15,17 @@ type UserRepository struct {
 	db *sql.DB
 }
 
-func NewUserRepository(db *sql.DB) *UserRepository {
-	return &UserRepository{db: db}
-}
-
-func (r *UserRepository) Init() error {
-	r.db.Exec(string(createUserTableQuery))
-
-	return nil
+func NewUserRepository(db *sql.DB) (*UserRepository, error) {
+	var repo = UserRepository{db: db}
+	var _, err = repo.db.Exec(string(createUserTableQuery))
+	if err != nil {
+		return nil, err
+	}
+	err = db.Ping()
+	if err != nil {
+		return nil, err
+	}
+	return &repo, nil
 }
 
 func (r *UserRepository) GetUserByName(ctx context.Context, name string) (*models.User, error) {

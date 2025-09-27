@@ -1,13 +1,17 @@
 package websocket
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"sync"
 
 	"massager/internal/models"
+	"massager/internal/ports"
 	"massager/internal/services/keying"
 
 	"github.com/gorilla/websocket"
@@ -26,27 +30,29 @@ type Client struct {
 	Conn    *websocket.Conn
 	Send    chan []byte
 	UserID  string
-	ChatIDs map[string]bool
+	ChatIDs map[int]bool
 }
 
 type Hub struct {
-	Clients    map[string]*Client
-	ChatRooms  map[string]map[string]bool
-	Broadcast  chan models.Message
-	Register   chan *Client
-	Unregister chan *Client
-	Mutex      sync.RWMutex
-	Logger     *slog.Logger
+	Clients     map[string]*Client
+	ChatRooms   map[int]map[string]bool
+	Broadcast   chan models.Message
+	Register    chan *Client
+	Unregister  chan *Client
+	Mutex       sync.RWMutex
+	ChatService ports.IMessageService
+	Logger      *slog.Logger
 }
 
-func NewHub(logger *slog.Logger) *Hub {
+func NewHub(chatService ports.IMessageService, logger *slog.Logger) *Hub {
 	return &Hub{
-		Clients:    make(map[string]*Client),
-		ChatRooms:  make(map[string]map[string]bool),
-		Broadcast:  make(chan models.Message),
-		Register:   make(chan *Client),
-		Unregister: make(chan *Client),
-		Logger:     logger,
+		Clients:     make(map[string]*Client),
+		ChatRooms:   make(map[int]map[string]bool),
+		Broadcast:   make(chan models.Message),
+		Register:    make(chan *Client),
+		Unregister:  make(chan *Client),
+		ChatService: chatService,
+		Logger:      logger,
 	}
 }
 
@@ -57,7 +63,7 @@ func (h *Hub) Run() {
 			h.Mutex.Lock()
 			h.Clients[client.UserID] = client
 			if client.ChatIDs == nil {
-				client.ChatIDs = make(map[string]bool)
+				client.ChatIDs = make(map[int]bool)
 			}
 			h.Mutex.Unlock()
 			h.Logger.Info("Client registered", "userID", client.UserID)
@@ -146,30 +152,88 @@ func (c *Client) ReadPump() {
 			break
 		}
 
-		var msg models.Message
-		if err := json.Unmarshal(message, &msg); err != nil {
+		var rawMsg map[string]interface{}
+		if err := json.Unmarshal(message, &rawMsg); err != nil {
 			c.Hub.Logger.Error("Failed to parse message", "error", err)
 			continue
 		}
 
-		if msg.Type == "message" {
-			msg.Key, _ = keying.GenerateKeyAES128()
-			msg.Content, _ = keying.Encrypt(msg.Key, msg.Content)
-			if err != nil {
-				log.Fatal(err)
+		var chatID int
+		if rawChatID, ok := rawMsg["chat_id"]; ok {
+			switch v := rawChatID.(type) {
+			case float64:
+				chatID = int(v)
+			case int:
+				chatID = v
+			case string:
+				if parsed, err := strconv.Atoi(v); err == nil {
+					chatID = parsed
+				} else {
+					c.Hub.Logger.Error("Invalid chat_id format", "chat_id", v)
+
+					errorMsg := map[string]interface{}{
+						"type":    "error",
+						"error":   "Invalid chat ID format",
+						"chat_id": v,
+					}
+					errorData, _ := json.Marshal(errorMsg)
+					c.Send <- errorData
+					continue
+				}
+			default:
+				c.Hub.Logger.Error("Unknown chat_id type", "type", fmt.Sprintf("%T", v))
+				continue
 			}
 		}
 
-		msg.Sender = c.UserID
+		msgType, _ := rawMsg["type"].(string)
 
-		switch msg.Type {
-		case "join_chat":
-			c.Hub.Logger.Info("Join chat request", "userID", c.UserID, "chatID", msg.ChatID)
-		case "message":
-			c.Hub.Logger.Info("New message", "userID", c.UserID, "chatID", msg.ChatID, "content", msg.Content)
+		c.Hub.Logger.Info("Processing message",
+			"type", msgType,
+			"chatID", chatID,
+			"sender", c.UserID)
+
+		if msgType == "message" {
+			content, _ := rawMsg["content"].(string)
+
+			err := c.Hub.ChatService.SendMessage(context.Background(), c.UserID, content, chatID)
+			if err != nil {
+				c.Hub.Logger.Error("Failed to send message",
+					"error", err,
+					"userID", c.UserID,
+					"chatID", chatID)
+
+				errorMsg := map[string]interface{}{
+					"type":    "error",
+					"error":   err.Error(),
+					"chat_id": chatID,
+					"details": "You are not a member of this chat or chat doesn't exist",
+				}
+				errorData, _ := json.Marshal(errorMsg)
+				c.Send <- errorData
+				continue
+			}
+
+			key, _ := keying.GenerateKeyAES128()
+			encryptedContent, _ := keying.Encrypt(key, content)
+
+			msg := models.Message{
+				Type:    "message",
+				ChatID:  chatID,
+				Sender:  c.UserID,
+				Content: encryptedContent,
+				Key:     key,
+			}
+
+			c.Hub.Broadcast <- msg
+		} else if msgType == "join_chat" {
+			msg := models.Message{
+				Type:   "join_chat",
+				ChatID: chatID,
+				Sender: c.UserID,
+			}
+			c.Hub.Broadcast <- msg
 		}
-
-		c.Hub.Broadcast <- msg
 	}
 }
 

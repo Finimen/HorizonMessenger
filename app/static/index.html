@@ -217,6 +217,12 @@
             font-size: 12px;
             margin: 2px;
         }
+
+        .message-time {
+            font-size: 10px;
+            opacity: 0.7;
+            margin-top: 2px;
+        }
     </style>
 </head>
 <body>
@@ -335,9 +341,17 @@
                 if (response.ok) {
                     currentToken = data.token;
                     currentUsername = username;
+                    
+                    localStorage.setItem('chatToken', currentToken);
+                    localStorage.setItem('chatUsername', currentUsername);
+                    
                     showChat();
                     loadUserChats();
-                    connectWebSocket();
+                    
+                    setTimeout(() => {
+                        connectWebSocket();
+                    }, 100);
+                    
                 } else {
                     showMessage(messageDiv, data.error || 'Login failed', 'error');
                 }
@@ -391,40 +405,31 @@
             document.getElementById('chatList').innerHTML = '';
         }
 
-        async function loadUserChats() {
-    if (!currentToken) {
-        console.log('No token available for loading chats');
-        return;
-    }
+        async function loadChatMessages(chatId) {
+            try {
+                const messagesDiv = document.getElementById('messages');
+                messagesDiv.innerHTML = '<div style="text-align: center; color: #666;">Loading messages...</div>';
+                
+                const response = await fetch(`/api/chats/${chatId}/messages?limit=50`, {
+                    headers: {
+                        'Authorization': `Bearer ${currentToken}`
+                    }
+                });
 
-    try {
-        const response = await fetch('/api/chats', {
-            headers: {
-                'Authorization': `Bearer ${currentToken}`
+                if (response.ok) {
+                    const data = await response.json();
+                    displayMessages(data.messages || []);
+                } else if (response.status === 404) {
+                    messagesDiv.innerHTML = '<div style="text-align: center; color: #666;">Chat not found</div>';
+                } else {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+            } catch (error) {
+                console.error('Failed to load messages:', error);
+                const messagesDiv = document.getElementById('messages');
+                messagesDiv.innerHTML = '<div style="text-align: center; color: #dc3545;">Failed to load messages</div>';
             }
-        });
-
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
-
-        const data = await response.json();
-        console.log('Loaded chats:', data.chats);
-        
-        if (data.chats && Array.isArray(data.chats)) {
-            userChats = data.chats; 
-            displayChats(userChats);
-        } else {
-            console.warn('Invalid chats data structure:', data);
-            userChats = [];
-            displayChats([]);
-        }
-    } catch (error) {
-        console.error('Failed to load chats:', error);
-        userChats = []; 
-        displayChats([]);
-    }
-}
     
 function joinAllChats() {
     if (!ws || ws.readyState !== WebSocket.OPEN) {
@@ -505,9 +510,21 @@ function joinAllChats() {
             const messagesDiv = document.getElementById('messages');
             messagesDiv.innerHTML = '';
 
+            if (messages.length === 0) {
+                messagesDiv.innerHTML = '<div style="text-align: center; color: #666;">No messages yet</div>';
+                return;
+            }
+
+            messages.sort((a, b) => new Date(a.timestamp || a.created_at || 0) - new Date(b.timestamp || b.created_at || 0));
+
             messages.forEach(message => {
-                const isOwn = message.sender_id === currentUsername;
-                addMessage(message.sender_id, message.content, isOwn ? 'own' : 'other');
+                console.log('CUR', currentUsername, 'OLD', message.sender);
+                const isOwn = message.sender === currentUsername;
+                const sender = message.sender_id || message.sender || 'Unknown';
+                const content = message.content || '';
+                const timestamp = message.timestamp || message.created_at;
+                
+                addMessage(sender, content, isOwn ? 'own' : 'other', timestamp);
             });
         }
 
@@ -639,65 +656,72 @@ function joinAllChats() {
         }
 
         function connectWebSocket() {
-            if (!currentToken) return;
+            console.log('Starting WebSocket connection...');
+            
+            if (!currentToken) {
+                console.error('No token available for WebSocket');
+                const savedToken = localStorage.getItem('chatToken');
+                const savedUser = localStorage.getItem('chatUsername');
+                
+                if (savedToken && savedUser) {
+                    currentToken = savedToken;
+                    currentUsername = savedUser;
+                    console.log('Restored from localStorage:', currentUsername);
+                } else {
+                    console.error('No token found in localStorage');
+                    return;
+                }
+            }
 
             const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
             const wsUrl = `${protocol}//${window.location.host}/api/ws?token=${currentToken}`;
             
-            ws = new WebSocket(wsUrl);
-
-            ws.onopen = function() {
-                console.log('WebSocket connected successfully');
-                addMessage('System', 'Connected to chat', 'other');
+            console.log('WebSocket URL:', wsUrl);
+            
+            try {
+                ws = new WebSocket(wsUrl);
                 
-                joinAllChats();
-            };
-
-            ws.onmessage = function(event) {
-                console.log('WebSocket message received:', event.data);
-                try {
-                    const message = JSON.parse(event.data);
+                ws.onopen = function(event) {
+                    console.log('✅ WebSocket connected successfully!');
+                    console.log('ReadyState:', ws.readyState);
                     
-                    if (message.type === 'message') {
-                        if (message.sender !== currentUsername) {
-                            if (currentChatId && message.chat_id === currentChatId) {
-                                addMessage(message.sender, message.content, 'other');
-                            }
-                        }
-                    } 
-                    else if (message.type === 'chat_created') {
-                        if (message.members && message.members.includes(currentUsername)) {
-                            console.log('You were added to new chat:', message.chat_name);
-                            
-                            const newChat = {
-                                id: message.chat_id,
-                                name: message.chat_name,
-                                members: message.members
-                            };
-                            
-                            if (!userChats.some(chat => chat.id === newChat.id)) {
-                                userChats.push(newChat);
-                                displayChats(userChats);
-                                
-                                setTimeout(() => joinChat(newChat.id), 100);
-                                
-                                showNotification(`You were added to chat: "${message.chat_name}" by ${message.created_by}`);
-                            }
-                        }
+                    document.getElementById('messageInput').disabled = false;
+                    document.getElementById('sendButton').disabled = false;
+                    
+                    setTimeout(() => {
+                        joinAllChats();
+                    }, 500);
+                };
+                
+                ws.onmessage = function(event) {
+                    console.log('📨 Message received:', event.data);
+                    try {
+                        const message = JSON.parse(event.data);
+                        handleWebSocketMessage(message);
+                    } catch (error) {
+                        console.log('Raw message:', event.data);
                     }
-                } catch (error) {
-                    console.log('System message:', event.data);
-                }
-            };
-
-            ws.onclose = function(event) {
-                console.log('WebSocket disconnected');
-                addMessage('System', 'Disconnected from chat', 'other');
-            };
-
-            ws.onerror = function(error) {
-                console.error('WebSocket error:', error);
-            };
+                };
+                
+                ws.onclose = function(event) {
+                    console.log('❌ WebSocket closed:', event.code, event.reason);
+                    
+                    document.getElementById('messageInput').disabled = true;
+                    document.getElementById('sendButton').disabled = true;
+                    
+                    setTimeout(() => {
+                        console.log('Attempting to reconnect...');
+                        connectWebSocket();
+                    }, 3000);
+                };
+                
+                ws.onerror = function(error) {
+                    console.error('WebSocket error:', error);
+                };
+                
+            } catch (error) {
+                console.error('Failed to create WebSocket:', error);
+            }
         }
 
         function joinChat(chatId) {
@@ -705,7 +729,7 @@ function joinAllChats() {
             
             const joinMessage = {
                 type: 'join_chat',
-                chat_id: chatId,
+                chat_id: parseInt(chatId),
                 sender: currentUsername
             };
             ws.send(JSON.stringify(joinMessage));
@@ -714,29 +738,97 @@ function joinAllChats() {
 
         function showNotification(message) {
             console.log('Notification:', message);
-            alert(`📢 ${message}`); // Временное решение, можно заменить на toast-уведомление
+            alert(`📢 ${message}`);
         }
 
         function sendMessage() {
-            if (!currentChatId || !ws || ws.readyState !== WebSocket.OPEN) return;
+            if (!currentChatId) {
+                alert('Please select a chat first');
+                return;
+            }
+            
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                alert('WebSocket not connected. Please refresh the page.');
+                return;
+            }
 
             const input = document.getElementById('messageInput');
             const message = input.value.trim();
 
-            if (!message) return;
+            if (!message) {
+                alert('Message cannot be empty');
+                return;
+            }
+
+            const numericChatId = parseInt(currentChatId, 10);
+            if (isNaN(numericChatId)) {
+                alert('Invalid chat ID');
+                return;
+            }
+
+            console.log('Sending message:', {
+                chatId: numericChatId,
+                message: message,
+                username: currentUsername
+            });
 
             const messageData = {
                 type: 'message',
-                chat_id: currentChatId,
+                chat_id: numericChatId,
                 content: message,
                 sender: currentUsername,
                 timestamp: new Date().toISOString()
             };
 
-            addMessage(currentUsername, message, 'own');
+            try {
+                ws.send(JSON.stringify(messageData));
+                input.value = '';
+                console.log('Message sent successfully');
+            } catch (error) {
+                console.error('Failed to send message:', error);
+                alert('Failed to send message: ' + error.message);
+            }
+        }
+
+        function handleWebSocketMessage(message) {
+            console.log('Handling WebSocket message:', message);
             
-            ws.send(JSON.stringify(messageData));
-            input.value = '';
+            switch (message.type) {
+                case 'message':
+                    console.log('New message received:', message);
+                    if (currentChatId && message.chat_id === currentChatId) {
+                        addMessage(message.sender, message.content, 
+                                message.sender === currentUsername ? 'own' : 'other', 
+                                message.timestamp);
+                    } else {
+                        console.log('Message for different chat or no chat selected');
+                    }
+                    break;
+                    
+                case 'chat_created':
+                    console.log('Chat created notification:', message);
+                    if (message.members && message.members.includes(currentUsername)) {
+                        console.log('You were added to new chat:', message.chat_name);
+                        loadUserChats();
+                    }
+                    break;
+                    
+                case 'error':
+                    console.error('Server error:', message);
+                    alert('Error: ' + (message.details || message.error));
+                    break;
+                    
+                case 'joined':
+                    console.log('Successfully joined chat:', message.chat_id);
+                    break;
+                    
+                case 'connected':
+                    console.log('WebSocket connection confirmed:', message.message);
+                    break;
+                    
+                default:
+                    console.log('Unknown message type:', message.type, message);
+            }
         }
 
         function handleKeyPress(event) {
@@ -751,11 +843,19 @@ function joinAllChats() {
         }
 
         function showChat() {
-             document.getElementById('authSection').classList.add('hidden');
+            document.getElementById('authSection').classList.add('hidden');
             document.getElementById('chatSection').classList.remove('hidden');
             document.getElementById('currentUser').textContent = currentUsername;
-    
-            setTimeout(() => testChatAPI(), 1000);
+            
+            updateDebugInfo();
+        }
+
+        function updateDebugInfo() {
+            console.log('=== DEBUG INFO ===');
+            console.log('Username:', currentUsername);
+            console.log('Token present:', !!currentToken);
+            console.log('WebSocket state:', ws ? ws.readyState : 'null');
+            console.log('Current chat:', currentChatId);
         }
 
         function showLoginForm() {
@@ -770,7 +870,7 @@ function joinAllChats() {
             clearMessages();
         }
 
-        function addMessage(sender, text, type) {
+        function addMessage(sender, text, type, timestamp) {
             const messagesDiv = document.getElementById('messages');
             const messageDiv = document.createElement('div');
             messageDiv.className = `message ${type}`;
@@ -784,8 +884,61 @@ function joinAllChats() {
             
             messageDiv.appendChild(senderSpan);
             messageDiv.appendChild(textSpan);
+            
+            // Добавляем timestamp, если есть
+            if (timestamp) {
+                const timeSpan = document.createElement('div');
+                timeSpan.className = 'message-time';
+                timeSpan.style.fontSize = '10px';
+                timeSpan.style.opacity = '0.7';
+                timeSpan.textContent = formatTimestamp(timestamp);
+                messageDiv.appendChild(timeSpan);
+            }
+            
             messagesDiv.appendChild(messageDiv);
             messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+
+        async function loadUserChats() {
+            try {
+                console.log('Loading user chats...');
+                
+                const response = await fetch('/api/chats', {
+                    headers: {
+                        'Authorization': `Bearer ${currentToken}`
+                    }
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    userChats = data.chats || [];
+                    console.log('Loaded chats:', userChats);
+                    displayChats(userChats);
+                    
+                    // Присоединяемся ко всем чатам через WebSocket
+                    setTimeout(() => {
+                        joinAllChats();
+                    }, 100);
+                    
+                } else {
+                    console.error('Failed to load chats:', response.status);
+                    userChats = [];
+                    displayChats([]);
+                }
+            } catch (error) {
+                console.error('Error loading chats:', error);
+                userChats = [];
+                displayChats([]);
+            }
+        }
+
+        function formatTimestamp(timestamp) {
+            try {
+                const date = new Date(timestamp);
+                return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            } catch (e) {
+                return '';
+            }
         }
 
         function showMessage(element, message, type) {
@@ -798,6 +951,31 @@ function joinAllChats() {
             document.getElementById('loginMessage').textContent = '';
             document.getElementById('registerMessage').textContent = '';
         }
+
+        document.getElementById('messageInput').addEventListener('keypress', function(event) {
+            if (event.key === 'Enter') {
+                sendMessage();
+            }
+        });
+
+        document.addEventListener('DOMContentLoaded', function() {
+            const savedToken = localStorage.getItem('chatToken');
+            const savedUser = localStorage.getItem('chatUsername');
+            
+            if (savedToken && savedUser) {
+                console.log('Found saved session, auto-login...');
+                currentToken = savedToken;
+                currentUsername = savedUser;
+                
+                showChat();
+                
+                setTimeout(() => {
+                    loadUserChats();
+                    connectWebSocket();
+                }, 500);
+            }
+        });
+
 
         document.getElementById('loginUsername').focus();
     </script>
