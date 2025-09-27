@@ -10,9 +10,19 @@ type Chat struct {
 }
 
 type Message struct {
-	ID        string    `json:"id"`
-	ChatID    string    `json:"chat_id"`
-	SenderID  string    `json:"sender_id"`
-	Content   string    `json:"content"`
-	Timestamp time.Time `json:"timestamp"`
+	Type      string `json:"type"`
+	ChatID    string `json:"chat_id,omitempty"`
+	Sender    string `json:"sender,omitempty"`
+	Content   string `json:"content,omitempty"`
+	Timestamp string `json:"timestamp,omitempty"`
+
+	ChatName  string   `json:"chat_name,omitempty"`
+	Members   []string `json:"members,omitempty"`
+	CreatedBy string   `json:"created_by,omitempty"`
+	Key       []byte   `json:"key"`
+}
+
+type KeyMassage struct {
+	Content []byte
+	Key     []byte
 }

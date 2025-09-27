@@ -2,9 +2,13 @@ package websocket
 
 import (
 	"encoding/json"
+	"log"
 	"log/slog"
 	"net/http"
 	"sync"
+
+	"massager/internal/models"
+	"massager/internal/services/keying"
 
 	"github.com/gorilla/websocket"
 )
@@ -28,7 +32,7 @@ type Client struct {
 type Hub struct {
 	Clients    map[string]*Client
 	ChatRooms  map[string]map[string]bool
-	Broadcast  chan Message
+	Broadcast  chan models.Message
 	Register   chan *Client
 	Unregister chan *Client
 	Mutex      sync.RWMutex
@@ -39,23 +43,11 @@ func NewHub(logger *slog.Logger) *Hub {
 	return &Hub{
 		Clients:    make(map[string]*Client),
 		ChatRooms:  make(map[string]map[string]bool),
-		Broadcast:  make(chan Message),
+		Broadcast:  make(chan models.Message),
 		Register:   make(chan *Client),
 		Unregister: make(chan *Client),
 		Logger:     logger,
 	}
-}
-
-type Message struct {
-	Type      string `json:"type"`
-	ChatID    string `json:"chat_id,omitempty"`
-	Sender    string `json:"sender,omitempty"`
-	Content   string `json:"content,omitempty"`
-	Timestamp string `json:"timestamp,omitempty"`
-
-	ChatName  string   `json:"chat_name,omitempty"`
-	Members   []string `json:"members,omitempty"`
-	CreatedBy string   `json:"created_by,omitempty"`
 }
 
 func (h *Hub) Run() {
@@ -87,7 +79,6 @@ func (h *Hub) Run() {
 
 		case message := <-h.Broadcast:
 			h.Mutex.RLock()
-
 			switch message.Type {
 			case "join_chat":
 				if h.ChatRooms[message.ChatID] == nil {
@@ -101,6 +92,13 @@ func (h *Hub) Run() {
 				h.Logger.Info("User joined chat", "userID", message.Sender, "chatID", message.ChatID)
 
 			case "message":
+				var err error
+				message.Content, err = keying.Decrypt(message.Key, message.Content)
+
+				if err != nil {
+					log.Fatal(err)
+				}
+
 				h.Logger.Info("Broadcasting message",
 					"chatID", message.ChatID,
 					"sender", message.Sender,
@@ -128,7 +126,7 @@ func (h *Hub) Run() {
 	}
 }
 
-func mustMarshal(msg Message) []byte {
+func mustMarshal(msg models.Message) []byte {
 	data, _ := json.Marshal(msg)
 	return data
 }
@@ -148,10 +146,18 @@ func (c *Client) ReadPump() {
 			break
 		}
 
-		var msg Message
+		var msg models.Message
 		if err := json.Unmarshal(message, &msg); err != nil {
 			c.Hub.Logger.Error("Failed to parse message", "error", err)
 			continue
+		}
+
+		if msg.Type == "message" {
+			msg.Key, _ = keying.GenerateKeyAES128()
+			msg.Content, _ = keying.Encrypt(msg.Key, msg.Content)
+			if err != nil {
+				log.Fatal(err)
+			}
 		}
 
 		msg.Sender = c.UserID
@@ -208,6 +214,7 @@ func (c *Client) WritePump() {
 			if err != nil {
 				return
 			}
+
 			w.Write(message)
 
 			if err := w.Close(); err != nil {
