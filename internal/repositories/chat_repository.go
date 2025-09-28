@@ -38,7 +38,7 @@ func NewChatRepository(db *sql.DB) (*ChatRepository, error) {
 	return &repo, nil
 }
 
-func (r *ChatRepository) CreateChat(ctx context.Context, name string, members []string) (int, error) {
+func (r *ChatRepository) CreateChat(ctx context.Context, name string, memberUsernames []string) (int, error) {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return 0, err
@@ -55,10 +55,15 @@ func (r *ChatRepository) CreateChat(ctx context.Context, name string, members []
 		return 0, err
 	}
 
-	for _, member := range members {
+	for _, username := range memberUsernames {
+		userID, err := r.getUserIDByUsername(ctx, username)
+		if err != nil {
+			return 0, fmt.Errorf("failed to find user %s: %v", username, err)
+		}
+
 		_, err = tx.ExecContext(ctx,
 			"INSERT INTO chat_participants (chat_id, user_id) VALUES (?, ?)",
-			chatId, member)
+			chatId, userID)
 		if err != nil {
 			return 0, err
 		}
@@ -72,20 +77,24 @@ func (r *ChatRepository) CreateChat(ctx context.Context, name string, members []
 }
 
 func (r *ChatRepository) GetUserChats(ctx context.Context, userID string) (*[]models.Chat, error) {
+	numericUserID, err := r.getUserIDByUsername(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+
 	var chats []models.Chat
 
 	query := `
-		SELECT
-			c.id,
-			c.chatname, 
-			cp.joined_at,
-			(SELECT COUNT(*) FROM chat_participants cp2 WHERE cp2.chat_id = c.id) as participant_count
-		FROM chats c
-		JOIN chat_participants cp ON c.id = cp.chat_id
-		WHERE cp.user_id = ?
-		ORDER BY cp.joined_at DESC`
+        SELECT
+            c.id,
+            c.chatname, 
+            cp.joined_at
+        FROM chats c
+        JOIN chat_participants cp ON c.id = cp.chat_id
+        WHERE cp.user_id = ?
+        ORDER BY cp.joined_at DESC`
 
-	rows, err := r.db.QueryContext(ctx, query, userID)
+	rows, err := r.db.QueryContext(ctx, query, numericUserID)
 	if err != nil {
 		return nil, err
 	}
@@ -94,9 +103,8 @@ func (r *ChatRepository) GetUserChats(ctx context.Context, userID string) (*[]mo
 	for rows.Next() {
 		var chat models.Chat
 		var joinedAt sql.NullTime
-		var participantCount int
 
-		err := rows.Scan(&chat.ID, &chat.Name, &joinedAt, &participantCount)
+		err := rows.Scan(&chat.ID, &chat.Name, &joinedAt)
 		if err != nil {
 			return nil, err
 		}
@@ -104,6 +112,13 @@ func (r *ChatRepository) GetUserChats(ctx context.Context, userID string) (*[]mo
 		if joinedAt.Valid {
 			chat.CreatedAt = joinedAt.Time
 		}
+
+		members, err := r.getChatMembers(ctx, chat.ID)
+		if err != nil {
+			return nil, err
+		}
+		chat.Members = members
+
 		chats = append(chats, chat)
 	}
 
@@ -121,8 +136,28 @@ func (r *ChatRepository) GetChatByID(ctx context.Context, chatID int) (*models.C
 		return nil, err
 	}
 
-	rows, err := r.db.QueryContext(ctx,
-		"SELECT user_id FROM chat_participants WHERE chat_id = ?", chatID)
+	members, err := r.getChatMembers(ctx, chatID)
+	if err != nil {
+		return nil, err
+	}
+	chat.Members = members
+
+	return &chat, nil
+}
+
+func (r *ChatRepository) DeleteChat(ctx context.Context, chatID int) error {
+	_, err := r.db.ExecContext(ctx, "DELETE FROM chats WHERE id = ?", chatID)
+	return err
+}
+
+func (r *ChatRepository) getChatMembers(ctx context.Context, chatID int) ([]string, error) {
+	query := `
+        SELECT u.username 
+        FROM users u
+        JOIN chat_participants cp ON u.id = cp.user_id
+        WHERE cp.chat_id = ?`
+
+	rows, err := r.db.QueryContext(ctx, query, chatID)
 	if err != nil {
 		return nil, err
 	}
@@ -130,13 +165,35 @@ func (r *ChatRepository) GetChatByID(ctx context.Context, chatID int) (*models.C
 
 	var members []string
 	for rows.Next() {
-		var userID string
-		if err := rows.Scan(&userID); err != nil {
+		var username string
+		if err := rows.Scan(&username); err != nil {
 			return nil, err
 		}
-		members = append(members, userID)
+		members = append(members, username)
 	}
 
-	chat.Members = members
-	return &chat, nil
+	return members, nil
+}
+
+func (r *ChatRepository) getUserIDByUsername(ctx context.Context, username string) (int, error) {
+	var userID int
+	err := r.db.QueryRowContext(ctx, "SELECT id FROM users WHERE username = ?", username).
+		Scan(&userID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return 0, fmt.Errorf("user not found: %s", username)
+		}
+		return 0, err
+	}
+	return userID, nil
+}
+
+func (r *ChatRepository) getUsernameByID(ctx context.Context, userID int) (string, error) {
+	var username string
+	err := r.db.QueryRowContext(ctx, "SELECT username FROM users WHERE id = ?", userID).
+		Scan(&username)
+	if err != nil {
+		return "", err
+	}
+	return username, nil
 }

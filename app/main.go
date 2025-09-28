@@ -109,6 +109,7 @@ func main() {
 			chatsGroup.POST("", chatHandler.CreateChat)
 			chatsGroup.GET("", chatHandler.GetUserChats)
 			chatsGroup.GET("/:chatId/messages", chatHandler.GetChatMessages)
+			chatsGroup.DELETE("/:chatId", chatHandler.DeleteChat)
 		}
 
 		api.GET("/ws", wsHandler.HandleWebSocket)

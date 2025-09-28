@@ -95,7 +95,6 @@ func (s *ChatService) CreateChat(ctx context.Context, chatName string, memberIDs
 		createdBy = memberIDs[0]
 	}
 
-	s.chatStore.CreateChat(chat)
 	s.notifyChatCreated(chat, createdBy)
 
 	s.logger.Info("chat created successfully", "chatID", chatID, "chatName", chatName, "memberCount", len(memberIDs))
@@ -186,6 +185,70 @@ func (s *ChatService) GetChatMessages(ctx context.Context, chatID, limit, offset
 
 	s.logger.Debug("retrieved chat messages", "chatID", chatID, "messageCount", len(messages))
 	return messages, nil
+}
+
+func (s *ChatService) DeleteChat(ctx context.Context, chatID int, username string) error {
+	if username == "" {
+		return ErrInvalidInput
+	}
+
+	chat, err := s.chatRepo.GetChatByID(ctx, chatID)
+	if err != nil {
+		s.logger.Error("failed to check chat existence", "chatID", chatID, "error", err)
+		return err
+	}
+	if chat == nil {
+		s.logger.Warn("chat not found", "chatID", chatID)
+		return ErrChatNotFound
+	}
+
+	isMember := false
+	for _, member := range chat.Members {
+		if member == username {
+			isMember = true
+			break
+		}
+	}
+
+	if !isMember {
+		s.logger.Warn("user is not a member of the chat", "userID", username, "chatID", chatID)
+		return ErrNotChatMember
+	}
+
+	err = s.chatRepo.DeleteChat(ctx, chatID)
+	if err != nil {
+		s.logger.Error("failed to delete chat", "chatID", chatID, "error", err)
+		return err
+	}
+
+	err = s.messageRepo.DeleteMessagesByChatID(ctx, chatID)
+	if err != nil {
+		s.logger.Error("failed to delete chat messages", "chatID", chatID, "error", err)
+	}
+
+	s.notifyChatDeleted(chatID, chat.Members, username)
+
+	s.logger.Info("chat deleted successfully", "chatID", chatID, "deletedBy", username)
+	return nil
+}
+
+func (s *ChatService) notifyChatDeleted(chatID int, members []string, deletedBy string) {
+	if s.wsHub == nil {
+		return
+	}
+
+	notification := map[string]interface{}{
+		"type":       "chat_deleted",
+		"chat_id":    chatID,
+		"deleted_by": deletedBy,
+		"deleted_at": time.Now().Format(time.RFC3339),
+	}
+
+	for _, member := range members {
+		s.wsHub.BroadcastToUser(member, notification)
+	}
+
+	s.logger.Info("notified chat members about deletion", "chatID", chatID, "members", members)
 }
 
 var (

@@ -81,3 +81,8 @@ func (r *MessageRepository) GetMessages(ctx context.Context, chatID, limit, offs
 	fmt.Println("LENLEN___ ", len(messages), "___LENLEN")
 	return messages, nil
 }
+
+func (r *MessageRepository) DeleteMessagesByChatID(ctx context.Context, chatID int) error {
+	_, err := r.db.ExecContext(ctx, "DELETE FROM messages WHERE chat_id = ?", chatID)
+	return err
+}

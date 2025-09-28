@@ -64,6 +64,10 @@ func (h *ChatHandler) GetChatMessages(c *gin.Context) {
 	}
 
 	chatID, err := strconv.Atoi(chatIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Chat ID is not int"})
+		return
+	}
 
 	limit := 50
 	if limitStr := c.Query("limit"); limitStr != "" {
@@ -100,4 +104,46 @@ func (h *ChatHandler) GetChatMessages(c *gin.Context) {
 
 	h.logger.Info("Retrieved chat messages", "chatID", chatID, "count", len(messages))
 	c.JSON(http.StatusOK, gin.H{"messages": messages})
+}
+
+func (h *ChatHandler) DeleteChat(c *gin.Context) {
+	chatIdStr := c.Param("chatId")
+	if chatIdStr == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Chat ID is required"})
+		return
+	}
+
+	chatID, err := strconv.Atoi(chatIdStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Chat ID is not int"})
+		return
+	}
+
+	username := c.GetString("username")
+
+	if chatIdStr == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Username is required"})
+		return
+	}
+
+	err = h.service.DeleteChat(c.Request.Context(), chatID, username)
+
+	if err != nil {
+		h.logger.Error("Failed to delete chat", "error", err, "chatID", chatID, "userID", username)
+
+		switch err {
+		case services.ErrChatNotFound:
+			c.JSON(http.StatusNotFound, gin.H{"error": "Chat not found"})
+		case services.ErrNotChatMember:
+			c.JSON(http.StatusForbidden, gin.H{"error": "You are not a member of this chat"})
+		case services.ErrInvalidInput:
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input"})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete chat"})
+		}
+		return
+	}
+
+	h.logger.Info("Chat deleted successfully", "chatID", chatID, "userID", username)
+	c.JSON(http.StatusOK, gin.H{"message": "Chat deleted successfully"})
 }
