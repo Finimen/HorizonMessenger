@@ -25,6 +25,14 @@ func NewWebSocketHandler(hub *internalWebsocket.Hub, authService *services.AuthS
 	}
 }
 
+// WebsocketHandler represents a WebSocket connection handler
+// @Summary WebSocket connection
+// @Tags websocket
+// @Description Establishes a real-time WebSocket connection
+// @Param token query string false "JWT token (cookie alternative)"
+// @Success 101 "Switching Protocols"
+// @Failure 401 {object} map[string]string
+// @Router /ws [get]
 func (h *WebsocetHandler) HandleWebSocket(c *gin.Context) {
 	token := c.Query("token")
 	if token == "" {

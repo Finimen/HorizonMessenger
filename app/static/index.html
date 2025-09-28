@@ -1,16 +1,26 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ru">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Massager Chat</title>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>Horizon Messenger</title>
     <link rel="stylesheet" href="static/style.css">
 </head>
 <body>
-    <div class="container">
-        <h1>💬 Massager Chat</h1>
-        
-        <div id="authSection" class="auth-section">
+     <!-- Splash Screen -->
+    <div id="splashScreen" class="splash-screen">
+        <div class="splash-content">
+            <div class="company-name">HORIZON</div>
+            <div class="project-name">Messenger</div>
+            <div class="loading-bar">
+                <div class="loading-progress"></div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Auth Section -->
+    <div id="authSection" class="auth-section">
+        <div class="auth-form">
             <div id="loginForm">
                 <h2>Login</h2>
                 <div class="form-group">
@@ -21,9 +31,9 @@
                     <label for="loginPassword">Password:</label>
                     <input type="password" id="loginPassword" placeholder="Enter your password">
                 </div>
-                <button onclick="login()">Login</button>
-                <button onclick="showRegisterForm()" style="background-color: #6c757d; margin-left: 10px;">Register</button>
-                <div id="loginMessage"></div>
+                <button class="auth-button" onclick="login()">Login</button>
+                <button class="auth-button auth-switch" onclick="showRegisterForm()">Register</button>
+                <div id="loginMessage" class="auth-message"></div>
             </div>
 
             <div id="registerForm" class="hidden">
@@ -40,52 +50,77 @@
                     <label for="registerPassword">Password:</label>
                     <input type="password" id="registerPassword" placeholder="Choose a password">
                 </div>
-                <button onclick="register()">Register</button>
-                <button onclick="showLoginForm()" style="background-color: #6c757d; margin-left: 10px;">Back to Login</button>
-                <div id="registerMessage"></div>
+                <button class="auth-button" onclick="register()">Register</button>
+                <button class="auth-button auth-switch" onclick="showLoginForm()">Back to Login</button>
+                <div id="registerMessage" class="auth-message"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Messenger -->
+    <div class="messenger-container hidden" id="messengerContainer">
+        <div class="contacts-section">
+            <div class="contacts-header">
+                <h2>Horizon Messeger</h2>
+                <button class="create-chat-btn" onclick="showCreateChatModal()" title="Create New Chat">+</button>
+                <div class="user-info">
+                    Welcome, <span id="currentUser"></span>! 
+                    <button class="logout-btn" onclick="logout()">Logout</button>
+                </div>
+            </div>
+            <div class="contacts-scroll" id="contactsScroll">
+                <!-- Контакты будут добавляться здесь -->
             </div>
         </div>
 
-        <div id="chatSection" class="chat-section hidden" style="display: flex; width: 100%; gap: 20px;">
-            <div class="chat-management">
-                <div class="user-info">
-                    Welcome, <span id="currentUser"></span>! 
-                    <button onclick="logout()" style="background-color: #dc3545; margin-left: 10px;">Logout</button>
-                </div>
+        <div class="chat-section">
+            <div class="chat-title" id="chatTitle" onclick="showChatInfo()">Выберите чат</div>
+            <div class="chat-messages-container">
+                <div class="chat-messages" id="chatMessages"></div>
                 
-                <div class="create-chat-form">
-                    <h3>Create New Chat</h3>
-                    <div class="form-group">
-                        <label for="chatName">Chat Name:</label>
-                        <input type="text" id="chatName" placeholder="Enter chat name">
-                    </div>
-                    <div class="form-group">
-                        <label>Add Members:</label>
-                        <div class="member-input">
-                            <input type="text" id="memberInput" placeholder="Enter username">
-                            <button onclick="addMember()">Add</button>
-                        </div>
-                        <div id="membersList"></div>
-                    </div>
-                    <button onclick="createChat()">Create Chat</button>
-                    <div id="createChatMessage"></div>
-                </div>
-
-                <h3>Your Chats</h3>
-                <div id="chatList" class="chat-list">
+                <div class="input-section">
+                    <input type="text" class="message-input" id="messageInput" placeholder="Выберите чат для отправки сообщений..." disabled>
+                    <button class="send-button" id="sendButton" disabled>↑</button>
                 </div>
             </div>
+        </div>
+    </div>
 
-            <div class="chat-container" style="flex: 1;">
-                <div class="user-info" id="currentChatInfo">
-                    Select a chat to start messaging
+    <!-- Create Chat Modal -->
+    <div id="createChatModal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Create New Chat</h3>
+                <span class="close" onclick="closeCreateChatModal()">&times;</span>
+            </div>
+            <div class="form-group">
+                <label for="chatName">Chat Name:</label>
+                <input type="text" id="chatName" placeholder="Enter chat name">
+            </div>
+            <div class="form-group">
+                <label>Add Members:</label>
+                <div class="member-input">
+                    <input type="text" id="memberInput" placeholder="Enter username">
+                    <button class="auth-button-half" onclick="addMember()" style="padding: 8px 15px;">Add</button>
                 </div>
-                
-                <div id="messages" class="messages"></div>
-                <div class="message-input">
-                    <input type="text" id="messageInput" placeholder="Select a chat to send messages" disabled>
-                    <button onclick="sendMessage()" disabled id="sendButton">Send</button>
-                </div>
+                <div id="membersList"></div>
+            </div>
+            <button class="auth-button" onclick="createChat()">Create Chat</button>
+            <div id="createChatMessage" class="auth-message"></div>
+        </div>
+    </div>
+
+    <!-- Chat Info Modal -->
+    <div id="chatInfoModal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="modalChatName">Chat Info</h3>
+                <span class="close" onclick="closeChatInfo()">&times;</span>
+            </div>
+            <div class="chat-info">
+                <p><strong>Created:</strong> <span id="modalChatCreated"></span></p>
+                <p><strong>Members:</strong></p>
+                <ul id="modalChatMembers"></ul>
             </div>
         </div>
     </div>

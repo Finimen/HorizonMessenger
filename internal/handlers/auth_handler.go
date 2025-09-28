@@ -18,6 +18,16 @@ func NewAuthHandler(service *services.AuthService, logger *slog.Logger) *AuthHan
 	return &AuthHandler{service: service, logger: logger}
 }
 
+// @Summary User login
+// @Tags auth
+// @Description Authenticates the user and returns a token
+// @Accept json
+// @Produce json
+// @Param request body LoginRequest true "Data for login"
+// @Success 200 {object} map[string]string
+// @Failure 400 {object} map[string]string
+// @Failure 401 {object} map[string]string
+// @Router /auth/login [post]
 func (a *AuthHandler) Login(c *gin.Context) {
 	var req struct {
 		Username string `json:"username"`
@@ -41,10 +51,27 @@ func (a *AuthHandler) Login(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"token": token})
 }
 
+// @Summary User logout
+// @Tags auth
+// @Description Terminates the user session
+// @Accept json
+// @Produce json
+// @Success 200
+// @Router /auth/logout [post]
 func (a *AuthHandler) Logout(c *gin.Context) {
 
 }
 
+// AuthHandler represents the authentication handler
+// @Summary User registration
+// @Tags auth
+// @Description Creates a new user in the system
+// @Accept json
+// @Produce json
+// @Param request body RegisterRequest true "Data for registration"
+// @Success 200 {object} map[string]string
+// @Failure 400 {object} map[string]string
+// @Router /auth/register [post]
 func (a *AuthHandler) Register(c *gin.Context) {
 	var req struct {
 		Username string `json:"username"`
@@ -68,9 +95,12 @@ func (a *AuthHandler) Register(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"massage": "User registered successfully"})
 }
 
+// @Summary Authentication middleware
+// @Tags auth
+// @Description Checks the JWT token in the Authorization header
+// @Security BearerAuth
 func (s *AuthHandler) AuthMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// 1. Извлечение токена из заголовка (HTTP логика)
 		tokenStr := c.GetHeader("Authorization")
 		if tokenStr == "" {
 			s.logger.Warn("missing authorization header")
@@ -79,10 +109,8 @@ func (s *AuthHandler) AuthMiddleware() gin.HandlerFunc {
 			return
 		}
 
-		// 2. Очистка токена (HTTP логика)
 		tokenStr = strings.TrimPrefix(tokenStr, "Bearer ")
 
-		// 3. Валидация токена (бизнес-логика)
 		username, err := s.service.ValidateToken(c.Request.Context(), tokenStr)
 		if err != nil {
 			s.logger.Warn("token validation failed", "error", err)
@@ -91,7 +119,6 @@ func (s *AuthHandler) AuthMiddleware() gin.HandlerFunc {
 			return
 		}
 
-		// 4. Установка данных в контекст (HTTP логика)
 		c.Set("username", username)
 		c.Set("token", tokenStr)
 

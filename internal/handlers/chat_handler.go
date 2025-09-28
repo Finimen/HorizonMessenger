@@ -18,6 +18,18 @@ func NewChatHandler(service *services.ChatService, logger *slog.Logger) *ChatHan
 	return &ChatHandler{service: service, logger: logger}
 }
 
+// ChatHandler represents the chat handler
+// @Summary Create a chat
+// @Tags chats
+// @Description Creates a new chat with the specified participants
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param request body CreateChatRequest true "Data for creating a chat"
+// @Success 200 {object} map[string]int
+// @Failure 400 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Router /chats [post]
 func (h *ChatHandler) CreateChat(c *gin.Context) {
 	var req struct {
 		MemberIDs []string `json:"member_ids"`
@@ -41,6 +53,15 @@ func (h *ChatHandler) CreateChat(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"chat_id": chatID})
 }
 
+// @Summary Get the user's chats
+// @Tags chats
+// @Description Returns a list of chats the user is participating in
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Success 200 {object} map[string]interface{}
+// @Failure 500 {object} map[string]string
+// @Router /chats [get]
 func (h *ChatHandler) GetUserChats(c *gin.Context) {
 	userID := c.GetString("username")
 	h.logger.Info("GetUserChats called", "userID", userID)
@@ -56,6 +77,20 @@ func (h *ChatHandler) GetUserChats(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"chats": chats})
 }
 
+// @Summary Get chat messages
+// @Tags chats
+// @Description Returns messages for the specified chat with pagination
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param chatId path int true "Chat ID"
+// @Param limit query int false "Message limit (max 100)"
+// @Param offset query int false "Offset"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} map[string]string
+// @Failure 404 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Router /chats/{chatId}/messages [get]
 func (h *ChatHandler) GetChatMessages(c *gin.Context) {
 	chatIDStr := c.Param("chatId")
 	if chatIDStr == "" {
@@ -106,6 +141,19 @@ func (h *ChatHandler) GetChatMessages(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"messages": messages})
 }
 
+// @Summary Delete chat
+// @Tags chats
+// @Description Deletes a chat (chat members only)
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param chatId path int true "Chat ID"
+// @Success 200 {object} map[string]string
+// @Failure 400 {object} map[string]string
+// @Failure 403 {object} map[string]string
+// @Failure 404 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Router /chats/{chatId} [delete]
 func (h *ChatHandler) DeleteChat(c *gin.Context) {
 	chatIdStr := c.Param("chatId")
 	if chatIdStr == "" {

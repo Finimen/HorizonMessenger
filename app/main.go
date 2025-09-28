@@ -17,6 +17,8 @@ import (
 	"syscall"
 	"time"
 
+	_ "massager/docs"
+
 	"github.com/gin-gonic/gin"
 	"github.com/go-redis/redis"
 )
@@ -47,6 +49,35 @@ func initLogger(cfg *config.EnvironmentConfig) *slog.Logger {
 	return logger
 }
 
+// @title Massager API
+// @version 1.0
+// @description Real-time messaging web service
+// @termsOfService https://github.com/Finimen/SafeMassager
+
+// @contact.name FinimenSniper
+// @contact.url https://github.com/Finimen/SafeMassager
+// @contact.email finimensniper@gmail.com
+
+// @license.name MIT
+// @license.url https://github.com/Finimen/SafeMassager
+
+// @host localhost:8080
+// @BasePath /api
+
+// @securityDefinitions.apikey BearerAuth
+// @in header
+// @name Authorization
+// @description JWT token in the format: Bearer <token>
+
+// @schemes http
+
+// main initializes and starts the messenger server
+// @Summary Information about API
+// @Description Returns basic information about the API
+// @Tags info
+// @Produce json
+// @Success 200 {object} map[string]string
+// @Router / [get]
 func main() {
 	var cfg, err = config.LoadConfig()
 	if err != nil {
