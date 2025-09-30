@@ -3,9 +3,11 @@ package models
 import "errors"
 
 type User struct {
-	Username string `json:"username"`
-	Password string `json:"password"`
-	Email    string `json:"emal"`
+	Username    string `json:"username"`
+	Password    string `json:"password"`
+	Email       string `json:"emal"`
+	IsVerefied  bool   `json:"is_verefied"`
+	VerifyToken string `json:"-"`
 }
 
 func NewUser(username, password, email string) *User {

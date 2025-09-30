@@ -1,6 +1,12 @@
 package handlers
 
+// PROPRIETARY AND CONFIDENTIAL
+// This code contains trade secrets and confidential material of Finimen Sniper / FSC.
+// Any unauthorized use, disclosure, or duplication is strictly prohibited.
+// © 2025 Finimen Sniper / FSC. All rights reserved.
+
 import (
+	"fmt"
 	"log/slog"
 	"massager/internal/services"
 	"net/http"
@@ -125,4 +131,73 @@ func (s *AuthHandler) AuthMiddleware() gin.HandlerFunc {
 		s.logger.Debug("request authorized", "username", username)
 		c.Next()
 	}
+}
+
+// @Summary Verify email
+// @Tags auth
+// @Description Verifies user's email using verification token
+// @Produce json
+// @Param token query string true "Verification token"
+// @Success 200 {object} map[string]string
+// @Failure 400 {object} map[string]string
+// @Router /auth/verify-email [get]
+func (a *AuthHandler) VerifyEmail(c *gin.Context) {
+	token := c.Query("token")
+	if token == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Verification token is requered"})
+		return
+	}
+
+	err := a.service.VerifyEmail(c.Request.Context(), token)
+	if err != nil {
+		a.logger.Warn("email verefication failed", "error", err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Email verefied successfully"})
+}
+
+func (a *AuthHandler) GetVerificationToken(c *gin.Context) {
+	username := c.Query("username")
+	if username == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Username is required"})
+		return
+	}
+
+	token, err := a.service.GetVerificationToken(c.Request.Context(), username)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if token == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "No verification token found"})
+		return
+	}
+
+	verificationLink := fmt.Sprintf("http://localhost:8080/api/auth/verify-email?token=%s", token)
+	c.JSON(http.StatusOK, gin.H{
+		"verification_link": verificationLink,
+		"message":           "Copy this link to verify your email",
+	})
+}
+
+func (a *AuthHandler) GetVerificationStatus(c *gin.Context) {
+	username := c.Query("username")
+	if username == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Username is required"})
+		return
+	}
+
+	verified, err := a.service.GetUserVerificationStatus(c.Request.Context(), username)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"username": username,
+		"verified": verified,
+	})
 }

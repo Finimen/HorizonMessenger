@@ -12,8 +12,10 @@ type IUserRepository interface {
 
 type IUserRepositoryReader interface {
 	GetUserByName(context.Context, string) (*models.User, error)
+	GetUserByVerifyToken(context.Context, string) (*models.User, error)
 }
 
 type IUserRepositoryWriter interface {
-	CreateUser(context.Context, string, string, string) error
+	CreateUser(context.Context, string, string, string, string) error
+	MarkUserAsVerified(context.Context, string) error
 }

@@ -54,8 +54,20 @@
                 <button class="auth-button auth-switch" onclick="showLoginForm()">Back to Login</button>
                 <div id="registerMessage" class="auth-message"></div>
             </div>
+
+            <div id="verifyEmailSection" class="hidden">
+                <h2>Verify Your Email</h2>
+                <p style="text-align: center; margin-bottom: 20px; color: #666;">
+                    We've sent a verification link to your email address.<br>
+                    Please check your inbox and click the link to verify your account.
+                </p>
+                <button class="auth-button" onclick="showLoginForm()">Back to Login</button>
+                <button class="auth-button auth-switch" onclick="resendVerification()">Resend Verification Email</button>
+            </div>
         </div>
     </div>
+
+    
 
     <!-- Main Messenger -->
     <div class="messenger-container hidden" id="messengerContainer">
@@ -126,5 +138,6 @@
     </div>
 
     <script src="static/app.js"></script>
+    <div id="notificationContainer" class="notification-container"></div>
 </body>
 </html>

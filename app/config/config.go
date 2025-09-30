@@ -1,5 +1,10 @@
 package config
 
+// PROPRIETARY AND CONFIDENTIAL
+// This code contains trade secrets and confidential material of Finimen Sniper / FSC.
+// Any unauthorized use, disclosure, or duplication is strictly prohibited.
+// © 2025 Finimen Sniper / FSC. All rights reserved.
+
 import (
 	"log"
 	"time"
@@ -14,6 +19,7 @@ type Config struct {
 	Redis       RedisConfig
 	JWT         JWTConfig
 	RateLimit   RateLimitConfig
+	Email       EmailConfig
 }
 
 type EnvironmentConfig struct {
@@ -42,6 +48,14 @@ type JWTConfig struct {
 type RateLimitConfig struct {
 	MaxRequests int
 	Window      time.Duration
+}
+
+type EmailConfig struct {
+	SMTHost  string
+	SMTPort  string
+	Username string
+	Password string
+	From     string
 }
 
 func LoadConfig() (config Config, err error) {

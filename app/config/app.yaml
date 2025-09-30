@@ -20,3 +20,10 @@ jwt:
 ratelimit:
   maxrequests: 100
   window: 1m 
+
+email:
+  smtHost: "smtp.gmail.com"
+  smtPort: "587"
+  username: "soldathekler@gmail.com"
+  password: "mxoj jbcr qsaz huhb"
+  from: "Horizon Messenger <soldathekler@gmail.com>"

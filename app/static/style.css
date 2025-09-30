@@ -31,9 +31,10 @@
             background: #1a001a;
             border: 1px solid #330033;
             border-radius: 15px;
-            padding: 30px;
+            padding: 25px;
             width: 400px;
             max-width: 90%;
+            transform: scale(0.925);
         }
         
         .auth-form h2 {
@@ -43,7 +44,7 @@
         }
         
         .form-group {
-            margin-bottom: 15px;
+            margin-bottom: 13px;
         }
         
         .form-group label {
@@ -74,7 +75,7 @@
             border-radius: 8px;
             color: white;
             cursor: pointer;
-            margin-bottom: 10px;
+            margin-bottom: 9px;
             transition: all 0.3s ease;
         }
         
@@ -869,4 +870,49 @@
 
 .splash-screen.hidden {
     animation: splashOut 0.8s ease-in-out forwards;
+}
+
+.verify-email-message {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 20px;
+    border-radius: 10px;
+    text-align: center;
+    margin-bottom: 20px;
+}
+
+.verify-email-message h3 {
+    margin: 0 0 10px 0;
+    font-size: 1.5em;
+}
+
+.verify-email-message p {
+    margin: 0;
+    opacity: 0.9;
+}
+
+.notification-warning {
+    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+    color: white;
+    padding: 10px 15px;
+    border-radius: 5px;
+    margin: 10px 0;
+    text-align: center;
+}
+
+.auth-message button {
+    width: 100%;
+    margin-top: 10px;
+}
+
+@media (max-width: 768px) {
+    .modal-content {
+        margin: 10% auto;
+        width: 90%;
+    }
+    
+    .verify-email-message {
+        padding: 15px;
+        margin: 10px;
+    }
 }

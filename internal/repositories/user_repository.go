@@ -30,9 +30,12 @@ func NewUserRepository(db *sql.DB) (*UserRepository, error) {
 
 func (r *UserRepository) GetUserByName(ctx context.Context, name string) (*models.User, error) {
 	var password, email string
-	query := "SELECT passwordHash, email FROM users WHERE username = ?"
+	var isVerified bool
+	var verifyToken sql.NullString
+
+	query := "SELECT passwordHash, email, is_verified, verify_token  FROM users WHERE username = ?"
 	row := r.db.QueryRowContext(ctx, query, name)
-	err := row.Scan(&password, &email)
+	err := row.Scan(&password, &email, &isVerified, &verifyToken)
 
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -40,17 +43,45 @@ func (r *UserRepository) GetUserByName(ctx context.Context, name string) (*model
 		}
 		return nil, err
 	}
-	return models.NewUser(name, password, email), err
-}
-
-func (r *UserRepository) CreateUser(ctx context.Context, username, hashedPassword, email string) error {
-	user := models.User{
-		Username: username,
-		Password: hashedPassword,
-		Email:    email,
+	var user = models.NewUser(name, password, email)
+	user.IsVerefied = isVerified
+	if verifyToken.Valid {
+		user.VerifyToken = verifyToken.String
 	}
 
-	_, err := r.db.ExecContext(ctx, "INSERT INTO users (username, passwordHash, email) VALUES (?, ?, ?)", user.Username, user.Password, user.Email)
+	return user, err
+}
 
+func (r *UserRepository) GetUserByVerifyToken(ctx context.Context, token string) (*models.User, error) {
+	var username, password, email string
+	var isVerified bool
+
+	query := "SELECT username, passwordHash, email, is_verified FROM users WHERE verify_token = ?"
+	row := r.db.QueryRowContext(ctx, query, token)
+	err := row.Scan(&username, &password, &email, &isVerified)
+
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	user := models.NewUser(username, password, email)
+	user.IsVerefied = isVerified
+	user.VerifyToken = token
+
+	return user, nil
+}
+
+func (r *UserRepository) CreateUser(ctx context.Context, username, hashedPassword, email, verifyToken string) error {
+	_, err := r.db.ExecContext(ctx, "INSERT INTO users (username, passwordHash, email, verify_token) VALUES (?, ?, ?, ?)",
+		username, hashedPassword, email, verifyToken)
+
+	return err
+}
+
+func (r *UserRepository) MarkUserAsVerified(ctx context.Context, username string) error {
+	_, err := r.db.ExecContext(ctx, "UPDATE users SET is_verified = TRUE, verify_token = NULL WHERE username = ?", username)
 	return err
 }

@@ -1,5 +1,10 @@
 package websocket
 
+// PROPRIETARY AND CONFIDENTIAL
+// This code contains trade secrets and confidential material of Finimen Sniper / FSC.
+// Any unauthorized use, disclosure, or duplication is strictly prohibited.
+// © 2025 Finimen Sniper / FSC. All rights reserved.
+
 import (
 	"context"
 	"encoding/json"

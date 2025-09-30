@@ -1,4 +1,3 @@
-// Глобальные переменные
         let ws = null;
         let currentToken = null;
         let currentUsername = null;
@@ -8,7 +7,6 @@
         let currentChatInfo = null;
         let lastMessagesCache = {};
 
-        // Функции авторизации
         async function login() {
             const username = document.getElementById('loginUsername').value;
             const password = document.getElementById('loginPassword').value;
@@ -44,7 +42,19 @@
                         connectWebSocket();
                     }, 100);
                 } else {
-                    showMessage(messageDiv, data.error || 'Login failed', 'error');
+                    if (data.error && data.error.toLowerCase().includes('email not verified')) {
+                        showMessage(messageDiv, data.error + ' Would you like to resend the verification email?', 'error');
+                        setTimeout(() => {
+                            const resendButton = document.createElement('button');
+                            resendButton.textContent = 'Resend Verification Email';
+                            resendButton.className = 'auth-button auth-switch';
+                            resendButton.style.marginTop = '10px';
+                            resendButton.onclick = () => resendVerificationForUser(username);
+                            messageDiv.appendChild(resendButton);
+                        }, 100);
+                    } else {
+                        showMessage(messageDiv, data.error || 'Login failed', 'error');
+                    }
                 }
             } catch (error) {
                 showMessage(messageDiv, 'Network error: ' + error.message, 'error');
@@ -74,8 +84,7 @@
                 const data = await response.json();
 
                 if (response.ok) {
-                    showMessage(messageDiv, 'Registration successful! Please login.', 'success');
-                    showLoginForm();
+                    showVerifyEmail();
                 } else {
                     showMessage(messageDiv, data.error || 'Registration failed', 'error');
                 }
@@ -83,6 +92,7 @@
                 showMessage(messageDiv, 'Network error: ' + error.message, 'error');
             }
         }
+
 
         function logout() {
             if (ws) {
@@ -98,7 +108,86 @@
             localStorage.removeItem('chatUsername');
         }
 
-        // Функции интерфейса
+        function showVerifyEmail() {
+            document.getElementById('authSection').classList.remove('hidden');
+            document.getElementById('loginForm').classList.add('hidden');
+            document.getElementById('registerForm').classList.add('hidden');
+            document.getElementById('verifyEmailSection').classList.remove('hidden');
+        }
+
+        async function resendVerification() {
+            const email = document.getElementById('registerEmail').value;
+            const messageDiv = document.getElementById('registerMessage');
+
+            if (!email) {
+                showMessage(messageDiv, 'Email is required', 'error');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/auth/resend-verification', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ email })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    showMessage(messageDiv, 'Verification email sent!', 'success');
+                } else {
+                    showMessage(messageDiv, data.error || 'Failed to resend verification email', 'error');
+                }
+            } catch (error) {
+                showMessage(messageDiv, 'Network error: ' + error.message, 'error');
+            }
+        }
+
+        async function resendVerificationForUser(username) {
+            const messageDiv = document.getElementById('loginMessage');
+            
+            try {
+                const response = await fetch('/api/auth/resend-verification', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ username })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    showMessage(messageDiv, 'Verification email sent! Please check your inbox.', 'success');
+                } else {
+                    showMessage(messageDiv, data.error || 'Failed to resend verification email', 'error');
+                }
+            } catch (error) {
+                showMessage(messageDiv, 'Network error: ' + error.message, 'error');
+            }
+        }
+
+        async function checkVerificationStatus() {
+            try {
+                const response = await fetch('/api/auth/verification-status', {
+                    headers: {
+                        'Authorization': `Bearer ${currentToken}`
+                    }
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    if (!data.verified) {
+                        showNotification('Please verify your email to access all features', 'warning');
+                    }
+                }
+            } catch (error) {
+                console.error('Failed to check verification status:', error);
+            }
+        }
+
         function showAuth() {
             document.getElementById('authSection').classList.remove('hidden');
             document.getElementById('messengerContainer').classList.add('hidden');
@@ -800,34 +889,56 @@ function selectChat(chatId, chatName, chatInfo) {
         });
 
         document.addEventListener('DOMContentLoaded', function() {
-            setTimeout(() => {
-        hideSplashScreen();
-        
-        const savedToken = localStorage.getItem('chatToken');
-        const savedUser = localStorage.getItem('chatUsername');
-        
-        if (savedToken && savedUser) {
-            currentToken = savedToken;
-            currentUsername = savedUser;
+            const urlParams = new URLSearchParams(window.location.search);
+            const verificationToken = urlParams.get('token');
             
-            // Небольшая задержка перед показом мессенджера
+            if (verificationToken) {
+                handleEmailVerification(verificationToken);
+            }
+            
             setTimeout(() => {
-                showMessenger();
+                hideSplashScreen();
                 
-                setTimeout(() => {
-                    loadUserChats();
-                    connectWebSocket();
-                    setTimeout(createRightEdgeParticles, 500);
-                }, 500);
-            }, 300);
-        } else {
-            // Если пользователь не авторизован, показываем форму входа
-            setTimeout(() => {
-                showAuth();
-                document.getElementById('loginUsername').focus();
-            }, 300);
-        }
-    }, 3000);
-        });
+                const savedToken = localStorage.getItem('chatToken');
+                const savedUser = localStorage.getItem('chatUsername');
+                
+                if (savedToken && savedUser) {
+                    currentToken = savedToken;
+                    currentUsername = savedUser;
+                    
+                    setTimeout(() => {
+                        showMessenger();
+                        
+                        setTimeout(() => {
+                            loadUserChats();
+                            connectWebSocket();
+                            checkVerificationStatus(); // Проверяем статус верификации
+                            setTimeout(createRightEdgeParticles, 500);
+                        }, 500);
+                    }, 300);
+                } else {
+                    setTimeout(() => {
+                        showAuth();
+                        document.getElementById('loginUsername').focus();
+                    }, 300);
+                }
+            }, 3000);
+            });
+
+            async function handleEmailVerification(token) {
+                try {
+                    const response = await fetch(`/api/auth/verify-email?token=${token}`);
+                    const data = await response.json();
+
+                    if (response.ok) {
+                        showNotification('Email verified successfully! You can now login.', 'success');
+                        window.history.replaceState({}, document.title, window.location.pathname);
+                    } else {
+                        showNotification(data.error || 'Email verification failed', 'error');
+                    }
+                } catch (error) {
+                    showNotification('Verification failed: ' + error.message, 'error');
+                }
+            }
 
         document.getElementById('sendButton').addEventListener('click', sendMessage);

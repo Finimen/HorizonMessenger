@@ -1,5 +1,10 @@
 package main
 
+// PROPRIETARY AND CONFIDENTIAL
+// This code contains trade secrets and confidential material of Finimen Sniper / FSC.
+// Any unauthorized use, disclosure, or duplication is strictly prohibited.
+// © 2025 Finimen Sniper / FSC. All rights reserved.
+
 import (
 	"context"
 	"fmt"
@@ -99,6 +104,7 @@ func main() {
 	fmt.Println("IS NILL????", repo == nil)
 	fmt.Println(repo.User == nil, repo.Chat == nil)
 
+	var emailService = services.NewEmailService(cfg.Email, logger)
 	var chatService = services.NewChatService(repo.Chat, repo.Message, repo.User, logger)
 
 	wsHub := websocket.NewHub(chatService, logger)
@@ -108,7 +114,7 @@ func main() {
 
 	var rateLimiter = NewRateLimiter(cfg.RateLimit.MaxRequests, cfg.RateLimit.Window)
 
-	var authService = services.NewAuthService(repo.User, &services.BcryptHasher{}, adapters.NewRedisTokenRepository(redisClient), []byte(cfg.JWT.SecretKey), logger)
+	var authService = services.NewAuthService(repo.User, emailService, &services.BcryptHasher{}, adapters.NewRedisTokenRepository(redisClient), []byte(cfg.JWT.SecretKey), logger)
 
 	ctx := context.Background()
 	chatService.CreateChat(ctx, "General Chat", []string{"user1", "user2"})
@@ -132,6 +138,9 @@ func main() {
 			authGroup.POST("/register", authHandler.Register)
 			authGroup.POST("/login", authHandler.Login)
 			authGroup.POST("/logout", authHandler.Logout)
+			authGroup.GET("/verify-email", authHandler.VerifyEmail)
+			authGroup.GET("/verification-token", authHandler.GetVerificationToken)
+			authGroup.GET("/verification-status", authHandler.GetVerificationStatus)
 		}
 
 		chatsGroup := api.Group("/chats")
