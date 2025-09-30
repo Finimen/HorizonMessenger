@@ -12,6 +12,8 @@ Copyright (c) 2025 Finimen Sniper / FSC. All rights reserved.
 
 Horizon Messenger is a cutting-edge real-time messaging platform designed for secure, focused communication. Built with modern technologies and a privacy-first approach, it offers a clean alternative to overloaded messaging apps.
 
+### Main devoloper - Finimen Sniper (finimensniper@gmail.com)
+
 ### ✨ Key Features
 
 - **Real-time Messaging**: Instant message delivery using WebSocket technology
@@ -37,7 +39,7 @@ Horizon Messenger is a cutting-edge real-time messaging platform designed for se
 - **CSS3** - Modern animations and particle effects
 - **HTML5** - Semantic markup and structure
 
-## 🔐 Security Features
+### 🔐 Security Features
 - **JWT Authentication**: Secure token-based authentication
 - **Email Verification**: Mandatory email confirmation
 - **Password Hashing**: Bcrypt password encryption
@@ -45,7 +47,7 @@ Horizon Messenger is a cutting-edge real-time messaging platform designed for se
 - **Input Validation**: Comprehensive input sanitization
 - **CORS Protection**: Cross-origin request security
 
-## Key Endpoints
+### Key Endpoints
 - **POST /api/auth/register** - User registration
 - **POST /api/auth/login** - User authentication
 - **GET /api/auth/verify-email** - Email verification
@@ -53,7 +55,7 @@ Horizon Messenger is a cutting-edge real-time messaging platform designed for se
 - **GET /api/chats** - Get user's chats
 - **GET /api/ws** - WebSocket connection
 
-##🎨 User Interface
+### 🎨 User Interface
 - **Splash Screen**: Elegant loading animation
 - **Authentication Forms**: Clean login/registration
 - **Chat Selection**: Horizontal contact list
@@ -61,14 +63,14 @@ Horizon Messenger is a cutting-edge real-time messaging platform designed for se
 - **Real-time Updates**: Live message delivery
 - **Particle Effects**: Dynamic background animations
 
-##⚡ Real-time Features
+### ⚡ Real-time Features
 - Instant message delivery
 - Live chat member presence
 - Real-time typing indicators
 - Automatic reconnection
 - Message history synchronization
 
-## 📊 Performance
+### 📊 Performance
 - **Low Latency**: Optimized Go backend
 - **Efficient Resource Usage**: Lightweight SQLite database
 - **Scalable Architecture**: Redis-backed session management
