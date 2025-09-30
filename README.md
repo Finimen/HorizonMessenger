@@ -38,41 +38,41 @@ Horizon Messenger is a cutting-edge real-time messaging platform designed for se
 - **HTML5** - Semantic markup and structure
 
 ## 🔐 Security Features
-JWT Authentication: Secure token-based authentication
-Email Verification: Mandatory email confirmation
-Password Hashing: Bcrypt password encryption
-Rate Limiting: Request throttling protection
-Input Validation: Comprehensive input sanitization
-CORS Protection: Cross-origin request security
+- **JWT Authentication**: Secure token-based authentication
+- **Email Verification**: Mandatory email confirmation
+- **Password Hashing**: Bcrypt password encryption
+- **Rate Limiting**: Request throttling protection
+- **Input Validation**: Comprehensive input sanitization
+- **CORS Protection**: Cross-origin request security
 
 ## Key Endpoints
-POST /api/auth/register - User registration
-POST /api/auth/login - User authentication
-GET /api/auth/verify-email - Email verification
-POST /api/chats - Create new chat
-GET /api/chats - Get user's chats
-GET /api/ws - WebSocket connection
+- **POST /api/auth/register** - User registration
+- **POST /api/auth/login** - User authentication
+- **GET /api/auth/verify-email** - Email verification
+- **POST /api/chats** - Create new chat
+- **GET /api/chats** - Get user's chats
+- **GET /api/ws** - WebSocket connection
 
 ##🎨 User Interface
-Splash Screen: Elegant loading animation
-Authentication Forms: Clean login/registration
-Chat Selection: Horizontal contact list
-Message Display: Card-based message bubbles
-Real-time Updates: Live message delivery
-Particle Effects: Dynamic background animations
+- **Splash Screen**: Elegant loading animation
+- **Authentication Forms**: Clean login/registration
+- **Chat Selection**: Horizontal contact list
+- **Message Display**: Card-based message bubbles
+- **Real-time Updates**: Live message delivery
+- **Particle Effects**: Dynamic background animations
 
 ##⚡ Real-time Features
-Instant message delivery
-Live chat member presence
-Real-time typing indicators
-Automatic reconnection
-Message history synchronization
+- Instant message delivery
+- Live chat member presence
+- Real-time typing indicators
+- Automatic reconnection
+- Message history synchronization
 
 ## 📊 Performance
-Low Latency: Optimized Go backend
-Efficient Resource Usage: Lightweight SQLite database
-Scalable Architecture: Redis-backed session management
-Fast Frontend: Vanilla JS without framework overhead
+- **Low Latency**: Optimized Go backend
+- **Efficient Resource Usage**: Lightweight SQLite database
+- **Scalable Architecture**: Redis-backed session management
+- **Fast Frontend**: Vanilla JS without framework overhead
 
 ## Screens
 <img width="1913" height="896" alt="Screenshot 2025-09-28 142621" src="https://github.com/user-attachments/assets/071c492d-0c9a-4323-813c-8ef1b0d139e6" />
