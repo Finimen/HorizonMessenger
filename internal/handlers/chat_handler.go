@@ -47,9 +47,22 @@ func (h *ChatHandler) CreateChat(c *gin.Context) {
 	}
 
 	userID := c.GetString("username")
-	req.MemberIDs = append(req.MemberIDs, userID)
 
-	chatID, err := h.service.CreateChat(c.Request.Context(), req.ChatName, req.MemberIDs)
+	uniqueMembers := make(map[string]bool)
+	uniqueMembers[userID] = true
+
+	for _, member := range req.MemberIDs {
+		if member != userID {
+			uniqueMembers[member] = true
+		}
+	}
+
+	finalMembers := make([]string, 0, len(uniqueMembers))
+	for member := range uniqueMembers {
+		finalMembers = append(finalMembers, member)
+	}
+
+	chatID, err := h.service.CreateChat(c.Request.Context(), req.ChatName, finalMembers)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -160,14 +173,18 @@ func (h *ChatHandler) GetChatMessages(c *gin.Context) {
 // @Failure 500 {object} map[string]string
 // @Router /chats/{chatId} [delete]
 func (h *ChatHandler) DeleteChat(c *gin.Context) {
+	h.logger.Info("Try to delete the chat")
+
 	chatIdStr := c.Param("chatId")
 	if chatIdStr == "" {
+		h.logger.Warn("Empty chat ID in delete request")
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Chat ID is required"})
 		return
 	}
 
 	chatID, err := strconv.Atoi(chatIdStr)
 	if err != nil {
+		h.logger.Warn("Invalid chat ID format", "chatId", chatIdStr, "error", err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Chat ID is not int"})
 		return
 	}

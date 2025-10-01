@@ -160,7 +160,7 @@ func main() {
 	})
 
 	var serv = &http.Server{
-		Addr:    cfg.Server.Port,
+		Addr:    ":" + cfg.Server.Port,
 		Handler: eng,
 	}
 
@@ -168,7 +168,7 @@ func main() {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 
 	go func() {
-		log.Printf("Server is starting on http://localhost%s\n", cfg.Server.Port)
+		log.Printf("Server is starting on http://localhost%s\n", serv.Addr)
 		if err := serv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("listen: http://localhost%s\n", err)
 		}
