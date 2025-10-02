@@ -198,6 +198,7 @@ class ApiService {
 class UIManager {
     constructor() {
         this.elements = this.cacheDOMElements();
+        this.setupHorizontalScroll();
     }
 
     cacheDOMElements() {
@@ -269,6 +270,56 @@ class UIManager {
     }
 
     // Chat UI
+    setupHorizontalScroll() {
+        const chatMessages = this.elements.chatMessages;
+        let isDragging = false;
+        let startX;
+        let scrollLeft;
+
+        chatMessages.addEventListener('mousedown', (e) => {
+            isDragging = true;
+            chatMessages.style.cursor = 'grabbing';
+            startX = e.pageX - chatMessages.offsetLeft;
+            scrollLeft = chatMessages.scrollLeft;
+        });
+
+        chatMessages.addEventListener('mouseleave', () => {
+            isDragging = false;
+            chatMessages.style.cursor = 'grab';
+        });
+
+        chatMessages.addEventListener('mouseup', () => {
+            isDragging = false;
+            chatMessages.style.cursor = 'grab';
+        });
+
+        chatMessages.addEventListener('mousemove', (e) => {
+            if (!isDragging) return;
+            e.preventDefault();
+            const x = e.pageX - chatMessages.offsetLeft;
+            const walk = (x - startX) * 2; // multiplier for faster scrolling
+            chatMessages.scrollLeft = scrollLeft - walk;
+        });
+
+        // Touch events for mobile
+        chatMessages.addEventListener('touchstart', (e) => {
+            isDragging = true;
+            startX = e.touches[0].pageX - chatMessages.offsetLeft;
+            scrollLeft = chatMessages.scrollLeft;
+        });
+
+        chatMessages.addEventListener('touchend', () => {
+            isDragging = false;
+        });
+
+        chatMessages.addEventListener('touchmove', (e) => {
+            if (!isDragging) return;
+            const x = e.touches[0].pageX - chatMessages.offsetLeft;
+            const walk = (x - startX) * 2;
+            chatMessages.scrollLeft = scrollLeft - walk;
+        });
+    }
+
     displayChats(chats, currentUsername, lastMessagesCache, onChatSelect, onChatDelete) {
         const container = this.elements.contactsScroll;
         
@@ -327,10 +378,10 @@ class UIManager {
                     No messages yet
                 </div>
             `;
+            container.style.cursor = 'default';
             return;
         }
 
-        // Sort messages chronologically
         const sortedMessages = [...messages].sort((a, b) => 
             new Date(a.timestamp || a.created_at || 0) - new Date(b.timestamp || b.created_at || 0)
         );
@@ -351,6 +402,7 @@ class UIManager {
         }).join('');
 
         container.innerHTML = messagesHTML;
+        container.style.cursor = 'grab'; 
         this.scrollToBottom(container);
     }
 
