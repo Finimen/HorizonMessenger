@@ -77,9 +77,13 @@ Horizon Messenger is a cutting-edge real-time messaging platform designed for se
 - **Fast Frontend**: Vanilla JS without framework overhead
 
 ## Screens
-<img width="1913" height="896" alt="Screenshot 2025-09-28 142621" src="https://github.com/user-attachments/assets/071c492d-0c9a-4323-813c-8ef1b0d139e6" />
-<img width="1907" height="954" alt="Screenshot 2025-09-28 121854" src="https://github.com/user-attachments/assets/064410e2-3bd5-4064-8a74-643f98955fba" />
-
+<img width="1919" height="1079" alt="Screenshot 2025-10-02 094553" src="https://github.com/user-attachments/assets/432156f0-4060-47dd-9b5b-a94c783eb680" />
+<img width="1919" height="1079" alt="Screenshot 2025-10-02 094548" src="https://github.com/user-attachments/assets/32c18694-798d-459b-b0a4-d105f50acdf9" />
+<img width="1919" height="1075" alt="Screenshot 2025-10-02 094517" src="https://github.com/user-attachments/assets/f0bee90d-620e-4fd6-9413-87c3edfca195" />
+<img width="1918" height="1079" alt="Screenshot 2025-10-02 094523" src="https://github.com/user-attachments/assets/6fff0181-9ba0-47f3-947c-690b20083573" />
+<img width="1919" height="1079" alt="Screenshot 2025-10-02 094440" src="https://github.com/user-attachments/assets/8a22581d-ad1f-40e3-8851-421030e1843d" />
+<img width="1916" height="1079" alt="Screenshot 2025-10-02 094451" src="https://github.com/user-attachments/assets/acb0c461-20ec-4927-a741-5bdd12511e37" />
+<img width="1919" height="1079" alt="Screenshot 2025-10-02 094540" src="https://github.com/user-attachments/assets/c37eba7a-0fc0-414f-992c-370791cbad99" />
 
 # CONFIDENTIALITY NOTICE
 
