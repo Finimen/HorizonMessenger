@@ -12,6 +12,7 @@ import (
 	"net/http"
 
 	libWebsocket "github.com/gorilla/websocket"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/gin-gonic/gin"
 )
@@ -20,13 +21,15 @@ type WebsocetHandler struct {
 	Hub         *internalWebsocket.Hub
 	AuthService *services.AuthService
 	Logger      *slog.Logger
+	Tracer      trace.Tracer
 }
 
-func NewWebSocketHandler(hub *internalWebsocket.Hub, authService *services.AuthService, logger *slog.Logger) *WebsocetHandler {
+func NewWebSocketHandler(hub *internalWebsocket.Hub, authService *services.AuthService, logger *slog.Logger, tracer trace.Tracer) *WebsocetHandler {
 	return &WebsocetHandler{
 		Hub:         hub,
 		AuthService: authService,
 		Logger:      logger,
+		Tracer:      tracer,
 	}
 }
 

@@ -3,7 +3,6 @@ package services
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log/slog"
 	"massager/internal/models"
 	"massager/internal/ports"
@@ -168,8 +167,6 @@ func (s *ChatService) SendMessage(ctx context.Context, senderID, content string,
 }
 
 func (s *ChatService) GetChatMessages(ctx context.Context, chatID, limit, offset int) ([]models.Message, error) {
-	fmt.Println("TRY GET STORED")
-
 	if limit <= 0 {
 		limit = 50
 	}

@@ -12,15 +12,18 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type ChatHandler struct {
 	service *services.ChatService
 	logger  *slog.Logger
+	tracer  trace.Tracer
 }
 
-func NewChatHandler(service *services.ChatService, logger *slog.Logger) *ChatHandler {
-	return &ChatHandler{service: service, logger: logger}
+func NewChatHandler(service *services.ChatService, logger *slog.Logger, tracer trace.Tracer) *ChatHandler {
+	return &ChatHandler{service: service, logger: logger, tracer: tracer}
 }
 
 // ChatHandler represents the chat handler
@@ -36,17 +39,26 @@ func NewChatHandler(service *services.ChatService, logger *slog.Logger) *ChatHan
 // @Failure 500 {object} map[string]string
 // @Router /chats [post]
 func (h *ChatHandler) CreateChat(c *gin.Context) {
+	ctx, span := h.tracer.Start(c.Request.Context(), "AuthHandler.Login")
+	defer span.End()
+
 	var req struct {
 		MemberIDs []string `json:"member_ids"`
 		ChatName  string   `json:"chat_name"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
+		span.RecordError(err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input"})
 		return
 	}
 
 	userID := c.GetString("username")
+
+	span.SetAttributes(
+		attribute.String("user.chatName", req.ChatName),
+		attribute.StringSlice("user.membersIDs", req.MemberIDs),
+	)
 
 	uniqueMembers := make(map[string]bool)
 	uniqueMembers[userID] = true
@@ -62,8 +74,9 @@ func (h *ChatHandler) CreateChat(c *gin.Context) {
 		finalMembers = append(finalMembers, member)
 	}
 
-	chatID, err := h.service.CreateChat(c.Request.Context(), req.ChatName, finalMembers)
+	chatID, err := h.service.CreateChat(ctx, req.ChatName, finalMembers)
 	if err != nil {
+		span.RecordError(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -81,11 +94,15 @@ func (h *ChatHandler) CreateChat(c *gin.Context) {
 // @Failure 500 {object} map[string]string
 // @Router /chats [get]
 func (h *ChatHandler) GetUserChats(c *gin.Context) {
+	ctx, span := h.tracer.Start(c.Request.Context(), "AuthHandler.Login")
+	defer span.End()
+
 	userID := c.GetString("username")
 	h.logger.Info("GetUserChats called", "userID", userID)
 
-	chats, err := h.service.GetUserChats(c.Request.Context(), userID)
+	chats, err := h.service.GetUserChats(ctx, userID)
 	if err != nil {
+		span.RecordError(err)
 		h.logger.Error("Failed to get user chats", "error", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -173,6 +190,9 @@ func (h *ChatHandler) GetChatMessages(c *gin.Context) {
 // @Failure 500 {object} map[string]string
 // @Router /chats/{chatId} [delete]
 func (h *ChatHandler) DeleteChat(c *gin.Context) {
+	ctx, span := h.tracer.Start(c.Request.Context(), "AuthHandler.Login")
+	defer span.End()
+
 	h.logger.Info("Try to delete the chat")
 
 	chatIdStr := c.Param("chatId")
@@ -184,6 +204,7 @@ func (h *ChatHandler) DeleteChat(c *gin.Context) {
 
 	chatID, err := strconv.Atoi(chatIdStr)
 	if err != nil {
+		span.RecordError(err)
 		h.logger.Warn("Invalid chat ID format", "chatId", chatIdStr, "error", err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Chat ID is not int"})
 		return
@@ -196,9 +217,10 @@ func (h *ChatHandler) DeleteChat(c *gin.Context) {
 		return
 	}
 
-	err = h.service.DeleteChat(c.Request.Context(), chatID, username)
+	err = h.service.DeleteChat(ctx, chatID, username)
 
 	if err != nil {
+		span.RecordError(err)
 		h.logger.Error("Failed to delete chat", "error", err, "chatID", chatID, "userID", username)
 
 		switch err {

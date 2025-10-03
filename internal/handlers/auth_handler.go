@@ -13,15 +13,18 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type AuthHandler struct {
 	service *services.AuthService
 	logger  *slog.Logger
+	tracer  trace.Tracer
 }
 
-func NewAuthHandler(service *services.AuthService, logger *slog.Logger) *AuthHandler {
-	return &AuthHandler{service: service, logger: logger}
+func NewAuthHandler(service *services.AuthService, logger *slog.Logger, tracer trace.Tracer) *AuthHandler {
+	return &AuthHandler{service: service, logger: logger, tracer: tracer}
 }
 
 // @Summary User login
@@ -35,19 +38,28 @@ func NewAuthHandler(service *services.AuthService, logger *slog.Logger) *AuthHan
 // @Failure 401 {object} map[string]string
 // @Router /auth/login [post]
 func (a *AuthHandler) Login(c *gin.Context) {
+	ctx, span := a.tracer.Start(c.Request.Context(), "AuthHandler.Login")
+	defer span.End()
+
 	var req struct {
 		Username string `json:"username"`
 		Password string `json:"password"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
+		span.RecordError(err)
 		a.logger.Warn("invalid input format", "error", err.Error())
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input format"})
 		return
 	}
 
-	token, err := a.service.Login(c.Request.Context(), req.Username, req.Password)
+	span.SetAttributes(
+		attribute.String("user.username", req.Username),
+	)
+
+	token, err := a.service.Login(ctx, req.Username, req.Password)
 	if err != nil {
+		span.RecordError(err)
 		a.logger.Warn("login failed", "username", req.Username, "error", err)
 		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
 		return
@@ -79,6 +91,9 @@ func (a *AuthHandler) Logout(c *gin.Context) {
 // @Failure 400 {object} map[string]string
 // @Router /auth/register [post]
 func (a *AuthHandler) Register(c *gin.Context) {
+	ctx, span := a.tracer.Start(c.Request.Context(), "AuthHandler.Login")
+	defer span.End()
+
 	var req struct {
 		Username string `json:"username"`
 		Password string `json:"password"`
@@ -86,13 +101,21 @@ func (a *AuthHandler) Register(c *gin.Context) {
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
+		span.RecordError(err)
 		a.logger.Warn("invalid input format", "error", err.Error())
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input format"})
 		return
 	}
 
-	err := a.service.Register(c.Request.Context(), req.Username, req.Password, req.Email)
+	span.SetAttributes(
+		attribute.String("user.username", req.Username),
+		attribute.String("user.password", req.Password),
+		attribute.String("user.email", req.Email),
+	)
+
+	err := a.service.Register(ctx, req.Username, req.Password, req.Email)
 	if err != nil {
+		span.RecordError(err)
 		a.logger.Warn("register failed", "username", req.Username, "error", err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return

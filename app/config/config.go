@@ -13,49 +13,72 @@ import (
 )
 
 type Config struct {
-	Environment EnvironmentConfig
-	Server      ServerConfig
-	Database    DatabaseConfig
-	Redis       RedisConfig
-	JWT         JWTConfig
-	RateLimit   RateLimitConfig
-	Email       EmailConfig
+	Environment         EnvironmentConfig         `mapstructure:"environment"`
+	Server              ServerConfig              `mapstructure:"server"`
+	Database            DatabaseConfig            `mapstructure:"database"`
+	DatabaseConnections DatabaseConnectionsConfig `mapstructure:"database_connections"`
+	Redis               RedisConfig               `mapstructure:"redis"`
+	JWT                 JWTConfig                 `mapstructure:"jwt"`
+	RateLimit           RateLimitConfig           `mapstructure:"ratelimit"`
+	Email               EmailConfig               `mapstructure:"email"`
+	Tracing             Tracing                   `mapstructure:"tracing"`
 }
 
 type EnvironmentConfig struct {
-	Current string
+	Current string `mapstructure:"current"`
 }
 
 type ServerConfig struct {
-	Port         string
-	CookieSecure bool
+	Port         string `mapstructure:"port"`
+	CookieSecure bool   `mapstructure:"cookiesecure"`
+	ReadTimeout  int    `mapstructure:"read_timeout"`
+	WriteTimeout int    `mapstructure:"write_timeout"`
+	IdleTimeout  int    `mapstructure:"idle_timeout"`
 }
 
 type DatabaseConfig struct {
-	Path string
+	Path     string `mapstructure:"path"`
+	Host     string `mapstructure:"host"`
+	Port     string `mapstructure:"port"`
+	User     string `mapstructure:"user"`
+	Password string `mapstructure:"password"`
+	DBName   string `mapstructure:"dbname"`
+}
+
+type DatabaseConnectionsConfig struct {
+	MaxOpenConns    int `mapstructure:"max_open_conns"`
+	MaxIdleConns    int `mapstructure:"max_idle_conns"`
+	ConnMaxLifetime int `mapstructure:"max_life_time"`
+	ConnMaxIdleTime int `mapstructure:"max_idle_time"`
 }
 
 type RedisConfig struct {
-	Addr     string
-	Password string
-	DB       int
+	Addr     string `mapstructure:"addr"`
+	Password string `mapstructure:"password"`
+	DB       int    `mapstructure:"db"`
 }
 
 type JWTConfig struct {
-	SecretKey string
+	SecretKey string `mapstructure:"secretkey"`
 }
 
 type RateLimitConfig struct {
-	MaxRequests int
-	Window      time.Duration
+	MaxRequests int           `mapstructure:"maxrequests"`
+	Window      time.Duration `mapstructure:"window"`
 }
 
 type EmailConfig struct {
-	SMTHost  string
-	SMTPort  string
-	Username string
-	Password string
-	From     string
+	SMTHost  string `mapstructure:"smtHost"`
+	SMTPort  string `mapstructure:"smtPort"`
+	Username string `mapstructure:"username"`
+	Password string `mapstructure:"password"`
+	From     string `mapstructure:"from"`
+}
+
+type Tracing struct {
+	Enabled     bool   `mapstructure:"enabled"`
+	ServiceName string `mapstructure:"service_name"`
+	Endpoint    string `mapstructure:"endpoint"` // Jaeger endpoint
 }
 
 func LoadConfig() (config Config, err error) {

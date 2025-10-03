@@ -3,6 +3,7 @@ package repositories
 import (
 	"context"
 	"database/sql"
+	"log/slog"
 	"massager/internal/models"
 
 	_ "embed"
@@ -15,14 +16,17 @@ type UserRepository struct {
 	db *sql.DB
 }
 
-func NewUserRepository(db *sql.DB) (*UserRepository, error) {
+func NewUserRepository(db *sql.DB, logger *slog.Logger) (*UserRepository, error) {
 	var repo = UserRepository{db: db}
 	var _, err = repo.db.Exec(string(createUserTableQuery))
 	if err != nil {
+		logger.Error(err.Error())
 		return nil, err
 	}
+
 	err = db.Ping()
 	if err != nil {
+		logger.Error(err.Error())
 		return nil, err
 	}
 	return &repo, nil
@@ -33,7 +37,7 @@ func (r *UserRepository) GetUserByName(ctx context.Context, name string) (*model
 	var isVerified bool
 	var verifyToken sql.NullString
 
-	query := "SELECT passwordHash, email, is_verified, verify_token  FROM users WHERE username = ?"
+	query := "SELECT passwordHash, email, is_verified, verify_token FROM users WHERE username = $1"
 	row := r.db.QueryRowContext(ctx, query, name)
 	err := row.Scan(&password, &email, &isVerified, &verifyToken)
 
@@ -56,7 +60,7 @@ func (r *UserRepository) GetUserByVerifyToken(ctx context.Context, token string)
 	var username, password, email string
 	var isVerified bool
 
-	query := "SELECT username, passwordHash, email, is_verified FROM users WHERE verify_token = ?"
+	query := "SELECT username, passwordHash, email, is_verified FROM users WHERE verify_token = $1"
 	row := r.db.QueryRowContext(ctx, query, token)
 	err := row.Scan(&username, &password, &email, &isVerified)
 
@@ -75,13 +79,16 @@ func (r *UserRepository) GetUserByVerifyToken(ctx context.Context, token string)
 }
 
 func (r *UserRepository) CreateUser(ctx context.Context, username, hashedPassword, email, verifyToken string) error {
-	_, err := r.db.ExecContext(ctx, "INSERT INTO users (username, passwordHash, email, verify_token) VALUES (?, ?, ?, ?)",
+	_, err := r.db.ExecContext(ctx,
+		"INSERT INTO users (username, passwordHash, email, verify_token) VALUES ($1, $2, $3, $4)",
 		username, hashedPassword, email, verifyToken)
 
 	return err
 }
 
 func (r *UserRepository) MarkUserAsVerified(ctx context.Context, username string) error {
-	_, err := r.db.ExecContext(ctx, "UPDATE users SET is_verified = TRUE, verify_token = NULL WHERE username = ?", username)
+	_, err := r.db.ExecContext(ctx,
+		"UPDATE users SET is_verified = TRUE, verify_token = NULL WHERE username = $1",
+		username)
 	return err
 }

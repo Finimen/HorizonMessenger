@@ -7,15 +7,7 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log"
-	"log/slog"
-	"massager/app/config"
-	"massager/internal/adapters"
-	"massager/internal/handlers"
-	"massager/internal/repositories"
-	"massager/internal/services"
-	websocket "massager/internal/websocet"
 	"net/http"
 	"os"
 	"os/signal"
@@ -23,35 +15,22 @@ import (
 	"time"
 
 	_ "massager/docs"
-
-	"github.com/gin-gonic/gin"
-	"github.com/go-redis/redis"
 )
 
-func initRedis(cfg *config.RedisConfig) *redis.Client {
-	var r = redis.NewClient(&redis.Options{
-		Addr:     cfg.Addr,
-		Password: cfg.Password,
-		DB:       cfg.DB,
-	})
-	return r
+func InitializeServer() (*Container, error) {
+	container, err := NewContainer()
+	if err != nil {
+		return nil, err
+	}
+	return container, nil
 }
 
-func initLogger(cfg *config.EnvironmentConfig) *slog.Logger {
-	var logger *slog.Logger
-	if cfg.Current == "development" {
-		logger = slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
-			Level: slog.LevelDebug,
-		}))
-	} else {
-		logger = slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
-			Level: slog.LevelInfo,
-		}))
-	}
+func GetContainer() (*Container, error) {
+	return NewContainer()
+}
 
-	slog.SetDefault(logger)
-
-	return logger
+func Stop(container *Container) {
+	container.Close()
 }
 
 // @title Massager API
@@ -84,92 +63,17 @@ func initLogger(cfg *config.EnvironmentConfig) *slog.Logger {
 // @Success 200 {object} map[string]string
 // @Router / [get]
 func main() {
-	var cfg, err = config.LoadConfig()
+	container, err := InitializeServer()
 	if err != nil {
-		log.Fatal(err)
-		return
-	}
-
-	var logger = initLogger(&cfg.Environment)
-	var redisClient = initRedis(&cfg.Redis)
-
-	var repo *repositories.RepositoryAdapter
-	repo, err = repositories.NewRepositoryAdapter(cfg.Database.Path)
-	if err != nil {
-		logger.Error("Repository initialize error",
-			"error", err.Error())
-		return
-	}
-
-	fmt.Println("IS NILL????", repo == nil)
-	fmt.Println(repo.User == nil, repo.Chat == nil)
-
-	var emailService = services.NewEmailService(cfg.Email, logger)
-	var chatService = services.NewChatService(repo.Chat, repo.Message, repo.User, logger)
-
-	wsHub := websocket.NewHub(chatService, logger)
-	go wsHub.Run()
-
-	chatService.SetWSHub(wsHub)
-
-	var rateLimiter = NewRateLimiter(cfg.RateLimit.MaxRequests, cfg.RateLimit.Window)
-
-	var authService = services.NewAuthService(repo.User, emailService, &services.BcryptHasher{}, adapters.NewRedisTokenRepository(redisClient), []byte(cfg.JWT.SecretKey), logger)
-
-	ctx := context.Background()
-	chatService.CreateChat(ctx, "General Chat", []string{"user1", "user2"})
-	chatService.CreateChat(ctx, "Random Chat", []string{"user1", "user3"})
-
-	var authHandler = handlers.NewAuthHandler(authService, logger)
-	var chatHandler = handlers.NewChatHandler(chatService, logger)
-
-	wsHandler := handlers.NewWebSocketHandler(wsHub, authService, logger)
-
-	var eng = gin.Default()
-
-	eng.Static("/static", "./static")
-	eng.LoadHTMLGlob("static/*.html")
-
-	api := eng.Group("/api")
-	api.Use(RateLimitMiddleware(rateLimiter))
-	{
-		authGroup := api.Group("/auth")
-		{
-			authGroup.POST("/register", authHandler.Register)
-			authGroup.POST("/login", authHandler.Login)
-			authGroup.POST("/logout", authHandler.Logout)
-			authGroup.GET("/verify-email", authHandler.VerifyEmail)
-			authGroup.GET("/verification-token", authHandler.GetVerificationToken)
-			authGroup.GET("/verification-status", authHandler.GetVerificationStatus)
-		}
-
-		chatsGroup := api.Group("/chats")
-		chatsGroup.Use(authHandler.AuthMiddleware())
-		{
-			chatsGroup.POST("", chatHandler.CreateChat)
-			chatsGroup.GET("", chatHandler.GetUserChats)
-			chatsGroup.GET("/:chatId/messages", chatHandler.GetChatMessages)
-			chatsGroup.DELETE("/:chatId", chatHandler.DeleteChat)
-		}
-
-		api.GET("/ws", wsHandler.HandleWebSocket)
-	}
-
-	eng.NoRoute(func(ctx *gin.Context) {
-		ctx.HTML(http.StatusOK, "index.html", nil)
-	})
-
-	var serv = &http.Server{
-		Addr:    ":" + cfg.Server.Port,
-		Handler: eng,
+		log.Fatal("Failed to initialize server:", err)
 	}
 
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 
 	go func() {
-		log.Printf("Server is starting on http://localhost%s\n", serv.Addr)
-		if err := serv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		log.Printf("Server is starting on http://localhost%s\n", container.Server.Addr)
+		if err := container.Server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("listen: http://localhost%s\n", err)
 		}
 	}()
@@ -177,10 +81,12 @@ func main() {
 	<-quit
 	log.Println("Shutting down server...")
 
+	Stop(container)
+
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	if err := serv.Shutdown(ctx); err != nil {
+	if err := container.Server.Shutdown(ctx); err != nil {
 		log.Fatal("Server forced to shutdown:", err)
 	}
 

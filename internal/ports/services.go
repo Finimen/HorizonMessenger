@@ -11,3 +11,9 @@ type IMessageService interface {
 type IEmailService interface {
 	SendVerificationEmail(email, token string) error
 }
+
+type IHasher interface {
+	GenerateFromPassword(password []byte, cost int) ([]byte, error)
+	CompareHashAndPassword(storedPaswsord []byte, userPassword []byte) error
+	DefaultCost() int
+}

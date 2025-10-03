@@ -5,12 +5,6 @@ import "golang.org/x/crypto/bcrypt"
 type BcryptHasher struct {
 }
 
-type IHasher interface {
-	GenerateFromPassword(password []byte, cost int) ([]byte, error)
-	CompareHashAndPassword(storedPaswsord []byte, userPassword []byte) error
-	DefaultCost() int
-}
-
 func (b *BcryptHasher) DefaultCost() int {
 	return bcrypt.DefaultCost
 }

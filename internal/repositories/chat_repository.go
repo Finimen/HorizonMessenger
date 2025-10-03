@@ -5,7 +5,9 @@ import (
 	"database/sql"
 	_ "embed"
 	"fmt"
+	"log/slog"
 	"massager/internal/models"
+	"strings"
 )
 
 //go:embed migrations/003_create_chats_table_up.sql
@@ -18,22 +20,24 @@ type ChatRepository struct {
 	db *sql.DB
 }
 
-func NewChatRepository(db *sql.DB) (*ChatRepository, error) {
+func NewChatRepository(db *sql.DB, logger *slog.Logger) (*ChatRepository, error) {
 	var repo = ChatRepository{db: db}
 	var _, err = repo.db.Exec(string(createChatTableQuery))
 	_, err = repo.db.Exec(string(createСhatParticipantsQuery))
 	if err != nil {
+		logger.Error(err.Error())
 		return nil, err
 	}
 
-	fmt.Println("CHAT STAGE 1")
+	logger.Info("chat repository initialization stage 1")
 
 	err = db.Ping()
 	if err != nil {
+		logger.Error(err.Error())
 		return nil, err
 	}
 
-	fmt.Println("CHAT STAGE 2")
+	logger.Info("chat repository initialization stage 2")
 
 	return &repo, nil
 }
@@ -45,24 +49,20 @@ func (r *ChatRepository) CreateChat(ctx context.Context, name string, memberUser
 	}
 	defer tx.Rollback()
 
-	res, err := tx.ExecContext(ctx, "INSERT INTO chats (chatname) VALUES (?)", name)
+	var chatId int64
+	err = tx.QueryRowContext(ctx, "INSERT INTO chats (chatname) VALUES ($1) RETURNING id", name).Scan(&chatId)
 	if err != nil {
 		return 0, err
 	}
 
-	chatId, err := res.LastInsertId()
+	userIDs, err := r.getUserIDsByUsernames(ctx, tx, memberUsernames)
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("failed to find users: %v", err)
 	}
 
-	for _, username := range memberUsernames {
-		userID, err := r.getUserIDByUsername(ctx, username)
-		if err != nil {
-			return 0, fmt.Errorf("failed to find user %s: %v", username, err)
-		}
-
+	for _, userID := range userIDs {
 		_, err = tx.ExecContext(ctx,
-			"INSERT INTO chat_participants (chat_id, user_id) VALUES (?, ?)",
+			"INSERT INTO chat_participants (chat_id, user_id) VALUES ($1, $2)",
 			chatId, userID)
 		if err != nil {
 			return 0, err
@@ -76,25 +76,28 @@ func (r *ChatRepository) CreateChat(ctx context.Context, name string, memberUser
 	return int(chatId), nil
 }
 
-func (r *ChatRepository) GetUserChats(ctx context.Context, userID string) (*[]models.Chat, error) {
-	numericUserID, err := r.getUserIDByUsername(ctx, userID)
-	if err != nil {
-		return nil, err
-	}
-
+func (r *ChatRepository) GetUserChats(ctx context.Context, username string) (*[]models.Chat, error) {
 	var chats []models.Chat
 
 	query := `
-        SELECT
-            c.id,
-            c.chatname, 
-            cp.joined_at
-        FROM chats c
-        JOIN chat_participants cp ON c.id = cp.chat_id
-        WHERE cp.user_id = ?
-        ORDER BY cp.joined_at DESC`
+		SELECT 
+			c.id, 
+			c.chatname,
+			cp.joined_at,
+			ARRAY_AGG(u.username) as members
+		FROM chats c
+		JOIN chat_participants cp ON c.id = cp.chat_id
+		JOIN users u ON u.id = cp.user_id
+		WHERE c.id IN (
+			SELECT chat_id 
+			FROM chat_participants cp2
+			JOIN users u2 ON u2.id = cp2.user_id 
+			WHERE u2.username = $1
+		)
+		GROUP BY c.id, c.chatname, cp.joined_at
+		ORDER BY cp.joined_at DESC`
 
-	rows, err := r.db.QueryContext(ctx, query, numericUserID)
+	rows, err := r.db.QueryContext(ctx, query, username)
 	if err != nil {
 		return nil, err
 	}
@@ -103,8 +106,9 @@ func (r *ChatRepository) GetUserChats(ctx context.Context, userID string) (*[]mo
 	for rows.Next() {
 		var chat models.Chat
 		var joinedAt sql.NullTime
+		var members string // PostgreSQL reterns ARRAY_AGG like string
 
-		err := rows.Scan(&chat.ID, &chat.Name, &joinedAt)
+		err := rows.Scan(&chat.ID, &chat.Name, &joinedAt, &members)
 		if err != nil {
 			return nil, err
 		}
@@ -113,13 +117,20 @@ func (r *ChatRepository) GetUserChats(ctx context.Context, userID string) (*[]mo
 			chat.CreatedAt = joinedAt.Time
 		}
 
-		members, err := r.getChatMembers(ctx, chat.ID)
-		if err != nil {
-			return nil, err
+		// the string witg array tooo []string
+		// PostgreSQL reterns ARRAY_AGG in format: {user1,user2,user3}
+		if members != "" {
+			members = strings.Trim(members, "{}")
+			if members != "" {
+				chat.Members = strings.Split(members, ",")
+			}
 		}
-		chat.Members = members
 
 		chats = append(chats, chat)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
 
 	return &chats, nil
@@ -127,8 +138,21 @@ func (r *ChatRepository) GetUserChats(ctx context.Context, userID string) (*[]mo
 
 func (r *ChatRepository) GetChatByID(ctx context.Context, chatID int) (*models.Chat, error) {
 	var chat models.Chat
-	err := r.db.QueryRowContext(ctx, "SELECT id, chatname FROM chats WHERE id = ?", chatID).
-		Scan(&chat.ID, &chat.Name)
+	var members string
+
+	query := `
+		SELECT 
+			c.id, 
+			c.chatname,
+			ARRAY_AGG(u.username) as members
+		FROM chats c
+		JOIN chat_participants cp ON c.id = cp.chat_id
+		JOIN users u ON u.id = cp.user_id
+		WHERE c.id = $1
+		GROUP BY c.id, c.chatname`
+
+	err := r.db.QueryRowContext(ctx, query, chatID).
+		Scan(&chat.ID, &chat.Name, &members)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
@@ -136,26 +160,27 @@ func (r *ChatRepository) GetChatByID(ctx context.Context, chatID int) (*models.C
 		return nil, err
 	}
 
-	members, err := r.getChatMembers(ctx, chatID)
-	if err != nil {
-		return nil, err
+	if members != "" {
+		members = strings.Trim(members, "{}")
+		if members != "" {
+			chat.Members = strings.Split(members, ",")
+		}
 	}
-	chat.Members = members
 
 	return &chat, nil
 }
 
 func (r *ChatRepository) DeleteChat(ctx context.Context, chatID int) error {
-	_, err := r.db.ExecContext(ctx, "DELETE FROM chats WHERE id = ?", chatID)
+	_, err := r.db.ExecContext(ctx, "DELETE FROM chats WHERE id = $1", chatID)
 	return err
 }
 
 func (r *ChatRepository) getChatMembers(ctx context.Context, chatID int) ([]string, error) {
 	query := `
-        SELECT u.username 
-        FROM users u
-        JOIN chat_participants cp ON u.id = cp.user_id
-        WHERE cp.chat_id = ?`
+		SELECT u.username 
+		FROM users u
+		JOIN chat_participants cp ON u.id = cp.user_id
+		WHERE cp.chat_id = $1`
 
 	rows, err := r.db.QueryContext(ctx, query, chatID)
 	if err != nil {
@@ -175,22 +200,49 @@ func (r *ChatRepository) getChatMembers(ctx context.Context, chatID int) ([]stri
 	return members, nil
 }
 
-func (r *ChatRepository) getUserIDByUsername(ctx context.Context, username string) (int, error) {
-	var userID int
-	err := r.db.QueryRowContext(ctx, "SELECT id FROM users WHERE username = ?", username).
-		Scan(&userID)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return 0, fmt.Errorf("user not found: %s", username)
-		}
-		return 0, err
+func (r *ChatRepository) getUserIDsByUsernames(ctx context.Context, tx *sql.Tx, usernames []string) ([]int, error) {
+	if len(usernames) == 0 {
+		return []int{}, nil
 	}
-	return userID, nil
+
+	// Create placeholders for IN request
+	placeholders := make([]string, len(usernames))
+	args := make([]interface{}, len(usernames))
+	for i, username := range usernames {
+		placeholders[i] = fmt.Sprintf("$%d", i+1)
+		args[i] = username
+	}
+
+	query := fmt.Sprintf(`
+		SELECT id 
+		FROM users 
+		WHERE username IN (%s)`, strings.Join(placeholders, ","))
+
+	rows, err := tx.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var userIDs []int
+	for rows.Next() {
+		var userID int
+		if err := rows.Scan(&userID); err != nil {
+			return nil, err
+		}
+		userIDs = append(userIDs, userID)
+	}
+
+	if len(userIDs) != len(usernames) {
+		return nil, fmt.Errorf("some users not found")
+	}
+
+	return userIDs, nil
 }
 
 func (r *ChatRepository) getUsernameByID(ctx context.Context, userID int) (string, error) {
 	var username string
-	err := r.db.QueryRowContext(ctx, "SELECT username FROM users WHERE id = ?", userID).
+	err := r.db.QueryRowContext(ctx, "SELECT username FROM users WHERE id = $1", userID).
 		Scan(&username)
 	if err != nil {
 		return "", err

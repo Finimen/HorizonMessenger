@@ -5,13 +5,27 @@ environment:
 server:
   port: "8080"
   cookiesecure: false
+  read_timeout: 15
+  write_timeout: 15
+  idle_timeout: 60
 
 database:
-  path: "./burgers.db"
+  path: "postgres://username:password@localhost/dbname?sslmode=disable"
+  host: "localhost"
+  port: "5432"
+  user: "postgres"
+  password: "REDACTED"
+  dbname: "horizon"
+  
+database_connections:
+  max_open_conns: 25
+  max_idle_conns: 10
+  max_life_time: 5
+  max_idle_time: 2
 
 redis:
   addr: "localhost:6379"
-  password: ""
+  password: "REDACTED"
   db: 0
 
 jwt:
@@ -24,6 +38,11 @@ ratelimit:
 email:
   smtHost: "smtp.gmail.com"
   smtPort: "587"
-  username: "soldathekler@gmail.com"
-  password: "mxoj jbcr qsaz huhb"
+  username: "REDACTED"
+  password: "REDACTED"
   from: "Horizon Messenger <soldathekler@gmail.com>"
+
+tracing:
+  enabled: true
+  service_name: "massager"
+  endpoint: "http://localhost:14268/api/traces"
