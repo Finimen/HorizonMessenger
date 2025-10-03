@@ -18,10 +18,10 @@ type AuthService struct {
 	logger       *slog.Logger
 	tokenRepo    ports.TokenRepository
 	jwtKey       []byte
-	emailService *EmailService
+	emailService ports.IEmailService
 }
 
-func NewAuthService(repo ports.IUserRepository, emailService *EmailService, hasher IHasher, tokenRepo ports.TokenRepository, jwtKey []byte, logger *slog.Logger) *AuthService {
+func NewAuthService(repo ports.IUserRepository, emailService ports.IEmailService, hasher IHasher, tokenRepo ports.TokenRepository, jwtKey []byte, logger *slog.Logger) *AuthService {
 	return &AuthService{userRepo: repo, emailService: emailService, hasher: hasher, tokenRepo: tokenRepo, jwtKey: jwtKey, logger: logger}
 }
 
