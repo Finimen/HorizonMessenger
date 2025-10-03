@@ -125,7 +125,7 @@ func TestLogin_TableDrive(t *testing.T) {
 				tokenRepository, jwtKey, logger)
 
 			var handler = handlers.NewAuthHandler(authService,
-				logger)
+				logger, tests.NoopTracer())
 
 			w := httptest.NewRecorder()
 			c, _ := gin.CreateTestContext(w)

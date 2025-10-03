@@ -186,7 +186,7 @@ func TestRegister_TableDrive(t *testing.T) {
 				mockRepository, mockEmailService, mockHasher,
 				tokenRepository, jwtKey, logger)
 
-			var handler = handlers.NewAuthHandler(authService, logger)
+			var handler = handlers.NewAuthHandler(authService, logger, tests.NoopTracer())
 
 			w := httptest.NewRecorder()
 			c, _ := gin.CreateTestContext(w)

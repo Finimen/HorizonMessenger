@@ -11,6 +11,8 @@ import (
 	"net/http/httptest"
 
 	"github.com/stretchr/testify/mock"
+	"go.opentelemetry.io/otel/trace"
+	"go.opentelemetry.io/otel/trace/noop"
 )
 
 type MockRepository struct {
@@ -23,6 +25,10 @@ type MockHasher struct {
 
 type MockEmailService struct {
 	mock.Mock
+}
+
+func NoopTracer() trace.Tracer {
+	return noop.NewTracerProvider().Tracer("test-tracer")
 }
 
 func (m *MockEmailService) NewEmailService(config config.EmailConfig, loggger *slog.Logger) *MockEmailService {
