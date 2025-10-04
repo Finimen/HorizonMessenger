@@ -13,7 +13,7 @@
 
 ## 🚀 Overview
 
-Horizon Messenger is a cutting-edge real-time messaging platform designed for secure, focused communication. Built with modern technologies and a privacy-first approach, it offers a clean alternative to overloaded messaging apps.
+**Horizon Messenger** is a cutting-edge real-time messaging platform designed for secure, focused communication. Built with modern technologies and a privacy-first approach, it offers a clean alternative to overloaded messaging apps.
 
 ---
 
