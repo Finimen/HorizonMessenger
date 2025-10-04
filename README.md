@@ -6,7 +6,7 @@
 
 ![Status](https://img.shields.io/badge/Status-Active-success)
 ![License](https://img.shields.io/badge/License-Proprietary-red)
-![Version](https://img.shields.io/badge/Version-1.0-blue)
+![Version](https://img.shields.io/badge/Version-0.14B-blue)
 ![Platform](https://img.shields.io/badge/Platform-Web_Mobile_Desktop-informational)
 
 </div>
@@ -71,7 +71,7 @@ Microservices Pattern
 **Health Checks** - K8s-ready liveness/readiness probes
 **Metrics Export** - Prometheus metrics endpoint
 
-###Enterprise Authentication
+### Enterprise Authentication
 ```go
 type AuthService struct {
     userRepo     ports.IUserRepository
