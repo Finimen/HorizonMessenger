@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🌅 Horizon Messenger
+# Horizon Messenger
 
 > **Secure, Real-Time Messaging Platform with Proprietary Technology**
 
@@ -17,7 +17,7 @@
 
 ---
 
-### 👨‍💻 Lead Architect
+### Lead Architect
 **Finimen Sniper** - 📧 finimensniper@gmail.com
 
 ---
