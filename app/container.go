@@ -7,6 +7,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"massager/app/config"
 	"massager/internal/adapters"
@@ -80,13 +81,14 @@ func (c *Container) initCore() error {
 	if err != nil {
 		return err
 	}
+
 	c.Config = &cfg
 
 	c.Logger = c.initLogger()
 	c.Redis = c.initRedis()
 
-	if err = c.initTracing(); err != nil {
-		return err
+	if err = c.initTracing(); err != nil || c.Tracer == nil {
+		return errors.New("Tracer initialization failed")
 	}
 
 	c.Repository, err = repositories.NewRepositoryAdapter(cfg.Database, cfg.DatabaseConnections, c.Logger)
@@ -96,7 +98,7 @@ func (c *Container) initCore() error {
 	}
 
 	var emailService = services.NewEmailService(cfg.Email, c.Logger)
-	var chatService = services.NewChatService(c.Repository.Chat, c.Repository.Message, c.Repository.User, c.Logger)
+	var chatService = services.NewChatService(c.Repository.Chat, c.Repository.Message, c.Repository.User, c.Logger, c.Tracer)
 
 	c.WsHub = websocket.NewHub(chatService, c.Logger)
 	go c.WsHub.Run()
@@ -105,7 +107,7 @@ func (c *Container) initCore() error {
 
 	c.RateLimiter = NewRateLimiter(cfg.RateLimit.MaxRequests, cfg.RateLimit.Window)
 
-	c.AuthService = services.NewAuthService(c.Repository.User, emailService, &services.BcryptHasher{}, adapters.NewRedisTokenRepository(c.Redis), []byte(cfg.JWT.SecretKey), c.Logger)
+	c.AuthService = services.NewAuthService(c.Repository.User, emailService, &services.BcryptHasher{}, adapters.NewRedisTokenRepository(c.Redis), []byte(cfg.JWT.SecretKey), c.Logger, c.Tracer)
 
 	c.AuthHandler = handlers.NewAuthHandler(c.AuthService, c.Logger, c.Tracer)
 	c.ChatHandler = handlers.NewChatHandler(chatService, c.Logger, c.Tracer)

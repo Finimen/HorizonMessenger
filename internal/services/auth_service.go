@@ -27,7 +27,7 @@ type AuthService struct {
 
 func NewAuthService(repo ports.IUserRepository, emailService ports.IEmailService, hasher ports.IHasher, tokenRepo ports.TokenRepository, jwtKey []byte,
 	logger *slog.Logger, tracer trace.Tracer) *AuthService {
-	return &AuthService{userRepo: repo, emailService: emailService, hasher: hasher, tokenRepo: tokenRepo, jwtKey: jwtKey, logger: logger}
+	return &AuthService{userRepo: repo, emailService: emailService, hasher: hasher, tokenRepo: tokenRepo, jwtKey: jwtKey, logger: logger, tracer: tracer}
 }
 
 func (s *AuthService) Register(c context.Context, username, password, email string) error {
