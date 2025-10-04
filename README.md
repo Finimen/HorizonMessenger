@@ -99,7 +99,9 @@ type AuthService struct {
 - Typing indicators and presence tracking
 - Message persistence with configurable retention
 
-📡 API Specification
+<div align="center">
+
+# 📡 API Specification
 ## Authentication Endpoints
 
 | Method | Endpoint                      | Description                           | Security |
@@ -124,6 +126,8 @@ type AuthService struct {
 | Method | Endpoint   | Description               | Protocol |
 |--------|------------|---------------------------|----------|
 | GET    | `/api/ws`  | WebSocket connection upgrade | WS       |
+
+</div>
 
 ---
 
