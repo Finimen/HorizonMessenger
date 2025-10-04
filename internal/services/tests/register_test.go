@@ -184,7 +184,7 @@ func TestRegister_TableDrive(t *testing.T) {
 
 			var authService = services.NewAuthService(
 				mockRepository, mockEmailService, mockHasher,
-				tokenRepository, jwtKey, logger)
+				tokenRepository, jwtKey, logger, tests.NoopTracer())
 
 			var handler = handlers.NewAuthHandler(authService, logger, tests.NoopTracer())
 

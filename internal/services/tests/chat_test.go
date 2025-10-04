@@ -91,7 +91,7 @@ func TestChat_CreateChat(t *testing.T) {
 
 			tt.setupMocks(chatRepo, userRepo, messageRepo)
 
-			service := services.NewChatService(chatRepo, messageRepo, userRepo, logger)
+			service := services.NewChatService(chatRepo, messageRepo, userRepo, logger, tests.NoopTracer())
 			chatID, err := service.CreateChat(ctx, tt.chatName, tt.memberIDs)
 
 			assert.Equal(t, tt.expectedID, chatID)
@@ -170,7 +170,7 @@ func TestChatService_GetUserChats(t *testing.T) {
 
 			tt.setupMocks(chatRepo, userRepo, messageRepo)
 
-			service := services.NewChatService(chatRepo, messageRepo, userRepo, logger)
+			service := services.NewChatService(chatRepo, messageRepo, userRepo, logger, tests.NoopTracer())
 			chats, err := service.GetUserChats(ctx, tt.userID)
 
 			assert.Equal(t, tt.expectedChats, chats)

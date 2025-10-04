@@ -8,6 +8,17 @@ import (
 	"massager/internal/ports"
 	websocket "massager/internal/websocet"
 	"time"
+
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
+)
+
+var (
+	ErrInvalidInput        = errors.New("invalid input")
+	ErrInsufficientMembers = errors.New("chat must have at least 2 members")
+	ErrUserNotFound        = errors.New("user not found")
+	ErrChatNotFound        = errors.New("chat not found")
+	ErrNotChatMember       = errors.New("user is not a member of this chat")
 )
 
 type ChatService struct {
@@ -16,14 +27,16 @@ type ChatService struct {
 	userRepo    ports.IUserRepository
 	logger      *slog.Logger
 	wsHub       *websocket.Hub
+	tracer      trace.Tracer
 }
 
-func NewChatService(chatRepo ports.IChatRepository, messageRepo ports.IMessageRepository, userRepo ports.IUserRepository, logger *slog.Logger) *ChatService {
+func NewChatService(chatRepo ports.IChatRepository, messageRepo ports.IMessageRepository, userRepo ports.IUserRepository, logger *slog.Logger, tracer trace.Tracer) *ChatService {
 	return &ChatService{
 		chatRepo:    chatRepo,
 		messageRepo: messageRepo,
 		userRepo:    userRepo,
 		logger:      logger,
+		tracer:      tracer,
 	}
 }
 
@@ -54,6 +67,9 @@ func (s *ChatService) notifyChatCreated(chat *models.Chat, createdBy string) {
 }
 
 func (s *ChatService) CreateChat(ctx context.Context, chatName string, memberIDs []string) (int, error) {
+	ctx, span := s.tracer.Start(ctx, "ChatService.CreateChat")
+	defer span.End()
+
 	if chatName == "" {
 		return 0, ErrInvalidInput
 	}
@@ -94,11 +110,15 @@ func (s *ChatService) CreateChat(ctx context.Context, chatName string, memberIDs
 
 	s.notifyChatCreated(chat, createdBy)
 
+	span.SetStatus(codes.Ok, "chat created successfully")
 	s.logger.Info("chat created successfully", "chatID", chatID, "chatName", chatName, "memberCount", len(memberIDs))
 	return chatID, nil
 }
 
 func (s *ChatService) GetUserChats(ctx context.Context, userID string) ([]models.Chat, error) {
+	ctx, span := s.tracer.Start(ctx, "ChatService.GetUserChats")
+	defer span.End()
+
 	if userID == "" {
 		return nil, ErrInvalidInput
 	}
@@ -119,11 +139,15 @@ func (s *ChatService) GetUserChats(ctx context.Context, userID string) ([]models
 		return nil, err
 	}
 
+	span.SetStatus(codes.Ok, "users chat got successfully")
 	s.logger.Info("retrieved user chats", "userID", userID, "chatCount", len(*chatPointers))
 	return *chatPointers, nil
 }
 
 func (s *ChatService) SendMessage(ctx context.Context, senderID, content string, chatID int) error {
+	ctx, span := s.tracer.Start(ctx, "ChatService.SendMessage")
+	defer span.End()
+
 	s.logger.Info("SendMessage called", "chatID", chatID, "senderID", senderID, "content", content)
 	if senderID == "" || content == "" {
 		return ErrInvalidInput
@@ -159,11 +183,15 @@ func (s *ChatService) SendMessage(ctx context.Context, senderID, content string,
 		return err
 	}
 
+	span.SetStatus(codes.Ok, "messege sended successfully")
 	s.logger.Info("message sent successfully", "chatID", chatID, "senderID", senderID)
 	return nil
 }
 
 func (s *ChatService) GetChatMessages(ctx context.Context, chatID, limit, offset int) ([]models.Message, error) {
+	ctx, span := s.tracer.Start(ctx, "ChatService.GetChatMessages")
+	defer span.End()
+
 	if limit <= 0 {
 		limit = 50
 	}
@@ -177,11 +205,15 @@ func (s *ChatService) GetChatMessages(ctx context.Context, chatID, limit, offset
 		return nil, err
 	}
 
+	span.SetStatus(codes.Ok, "messege got successfully")
 	s.logger.Debug("retrieved chat messages", "chatID", chatID, "messageCount", len(messages))
 	return messages, nil
 }
 
 func (s *ChatService) DeleteChat(ctx context.Context, chatID int, username string) error {
+	ctx, span := s.tracer.Start(ctx, "ChatService.DeleteChat")
+	defer span.End()
+
 	if username == "" {
 		return ErrInvalidInput
 	}
@@ -222,6 +254,7 @@ func (s *ChatService) DeleteChat(ctx context.Context, chatID int, username strin
 
 	s.notifyChatDeleted(chatID, chat.Members, username)
 
+	span.SetStatus(codes.Ok, "chat deleted successfully")
 	s.logger.Info("chat deleted successfully", "chatID", chatID, "deletedBy", username)
 	return nil
 }
@@ -244,11 +277,3 @@ func (s *ChatService) notifyChatDeleted(chatID int, members []string, deletedBy 
 
 	s.logger.Info("notified chat members about deletion", "chatID", chatID, "members", members)
 }
-
-var (
-	ErrInvalidInput        = errors.New("invalid input")
-	ErrInsufficientMembers = errors.New("chat must have at least 2 members")
-	ErrUserNotFound        = errors.New("user not found")
-	ErrChatNotFound        = errors.New("chat not found")
-	ErrNotChatMember       = errors.New("user is not a member of this chat")
-)

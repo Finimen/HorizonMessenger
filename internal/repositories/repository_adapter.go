@@ -69,5 +69,8 @@ func (r *RepositoryAdapter) Close(logger *slog.Logger) error {
 }
 
 func (r *RepositoryAdapter) HealthCheck(ctx context.Context) error {
+	if err := r.User.db.PingContext(ctx); err != nil {
+		return fmt.Errorf("database health check failed: %w", err)
+	}
 	return nil
 }
