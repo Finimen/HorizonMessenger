@@ -31,6 +31,58 @@ func NoopTracer() trace.Tracer {
 	return noop.NewTracerProvider().Tracer("test-tracer")
 }
 
+type MockChatRepository struct {
+	mock.Mock
+}
+
+func (m *MockChatRepository) CreateChat(ctx context.Context, name string, members []string) (int, error) {
+	args := m.Called(ctx, name, members)
+	return args.Int(0), args.Error(1)
+}
+
+func (m *MockChatRepository) GetUserChats(ctx context.Context, userID string) (*[]models.Chat, error) {
+	args := m.Called(ctx, userID)
+	return args.Get(0).(*[]models.Chat), args.Error(1)
+}
+
+func (m *MockChatRepository) GetChatByID(ctx context.Context, chatID int) (*models.Chat, error) {
+	args := m.Called(ctx, chatID)
+	return args.Get(0).(*models.Chat), args.Error(1)
+}
+
+func (m *MockChatRepository) DeleteChat(ctx context.Context, chatID int) error {
+	args := m.Called(ctx, chatID)
+	return args.Error(0)
+}
+
+type MockMessageRepository struct {
+	mock.Mock
+}
+
+func (m *MockMessageRepository) CreateMessage(ctx context.Context, senderID, content string, chatID int) error {
+	args := m.Called(ctx, senderID, content, chatID)
+	return args.Error(0)
+}
+
+func (m *MockMessageRepository) GetMessages(ctx context.Context, chatID, limit, offset int) ([]models.Message, error) {
+	args := m.Called(ctx, chatID, limit, offset)
+	return args.Get(0).([]models.Message), args.Error(1)
+}
+
+func (m *MockMessageRepository) DeleteMessagesByChatID(ctx context.Context, chatID int) error {
+	args := m.Called(ctx, chatID)
+	return args.Error(0)
+}
+
+type mockUserRepo struct {
+	mock.Mock
+}
+
+func (m *mockUserRepo) GetUserByName(ctx context.Context, name string) (*models.User, error) {
+	args := m.Called(ctx, name)
+	return args.Get(0).(*models.User), args.Error(1)
+}
+
 func (m *MockEmailService) NewEmailService(config config.EmailConfig, loggger *slog.Logger) *MockEmailService {
 	args := m.Called(config, loggger)
 	return args.Get(0).(*MockEmailService)

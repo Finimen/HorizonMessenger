@@ -1,5 +1,10 @@
 package main
 
+// PROPRIETARY AND CONFIDENTIAL
+// This code contains trade secrets and confidential material of Finimen Sniper / FSC.
+// Any unauthorized use, disclosure, or duplication is strictly prohibited.
+// © 2025 Finimen Sniper / FSC. All rights reserved.
+
 import (
 	"context"
 	"log/slog"
@@ -299,7 +304,7 @@ func (c *Container) Close() error {
 	}
 
 	if c.Repository != nil {
-		c.Close()
+		c.Repository.Close(c.Logger)
 	}
 
 	if c.TracerProvider != nil {

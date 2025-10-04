@@ -14,7 +14,6 @@ type ChatService struct {
 	chatRepo    ports.IChatRepository
 	messageRepo ports.IMessageRepository
 	userRepo    ports.IUserRepository
-	chatStore   *MemoryChatStore
 	logger      *slog.Logger
 	wsHub       *websocket.Hub
 }
@@ -24,7 +23,6 @@ func NewChatService(chatRepo ports.IChatRepository, messageRepo ports.IMessageRe
 		chatRepo:    chatRepo,
 		messageRepo: messageRepo,
 		userRepo:    userRepo,
-		chatStore:   NewMemoryChatStore(chatRepo),
 		logger:      logger,
 	}
 }
@@ -115,15 +113,14 @@ func (s *ChatService) GetUserChats(ctx context.Context, userID string) ([]models
 		return nil, ErrUserNotFound
 	}
 
-	chatPointers := *s.chatStore.GetUserChats(userID)
+	chatPointers, err := s.chatRepo.GetUserChats(ctx, userID)
 
-	chats := make([]models.Chat, len(chatPointers))
-	for i, chatPtr := range chatPointers {
-		chats[i] = chatPtr
+	if err != nil {
+		return nil, err
 	}
 
-	s.logger.Info("retrieved user chats", "userID", userID, "chatCount", len(chats))
-	return chats, nil
+	s.logger.Info("retrieved user chats", "userID", userID, "chatCount", len(*chatPointers))
+	return *chatPointers, nil
 }
 
 func (s *ChatService) SendMessage(ctx context.Context, senderID, content string, chatID int) error {
