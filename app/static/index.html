@@ -80,13 +80,22 @@
         <div class="contacts-section">
             <div class="contacts-header">
                 <h2>Horizon Messenger</h2>
-                <button class="btn btn-primary btn-sm create-chat-btn" onclick="showCreateChatModal()" title="Create New Chat">
-                    <span class="create-chat-icon">+</span>
-                    <span class="create-chat-text">New Chat</span>
-                </button>
-                <div class="user-info">
-                    Welcome, <span id="currentUser"></span>! 
-                    <button class="logout-btn" onclick="logout()">Logout</button>
+                <div class="header-controls">
+
+                    <button class="btn btn-primary btn-sm create-chat-btn" onclick="showCreateChatModal()" title="Create New Chat">
+                        <span class="create-chat-icon">+</span>
+                        <span class="create-chat-text">New Chat</span>
+                    </button>
+                    <button class="btn btn-secondary btn-sm settings-btn" onclick="showSettings()" title="Settings">
+                        <span class="settings-icon">⚙️</span>
+                        <span class="settings-text">Settings</span>
+                    </button>
+                    </div>
+
+                    <div class="user-info">
+                        Welcome, <span id="currentUser"></span>! 
+                        <button class="logout-btn" onclick="logout()">Logout</button>
+                    
                 </div>
             </div>
             <div class="contacts-scroll" id="contactsScroll">
@@ -151,5 +160,201 @@
 
     <script src="static/app.js"></script>
     <div id="notificationContainer" class="notification-container"></div>
+    <div class="sound-controls">
+    <div id="settingsModal" class="modal hidden">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>Settings</h3>
+            <span class="close" onclick="closeSettings()">&times;</span>
+        </div>
+        
+        <div class="settings-content">
+            <!-- Sound Settings -->
+            <div class="settings-section">
+                <h4>Sound & Notifications</h4>
+                <div class="setting-item">
+                    <div class="setting-info">
+                        <span class="setting-label">Enable sounds</span>
+                        <span class="setting-description">Play sounds for messages and notifications</span>
+                    </div>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="soundToggleSetting" checked>
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
+                
+                <div class="setting-item">
+                    <div class="setting-info">
+                        <span class="setting-label">Message sounds</span>
+                        <span class="setting-description">Sound when receiving new messages</span>
+                    </div>
+                    <select id="messageSoundSetting" class="setting-select">
+                        <option value="default">Default</option>
+                        <option value="gentle">Gentle</option>
+                        <option value="classic">Classic</option>
+                        <option value="modern">Modern</option>
+                    </select>
+                </div>
+                
+                <div class="setting-item">
+                    <div class="setting-info">
+                        <span class="setting-label">Notification sounds</span>
+                        <span class="setting-description">Sound for system notifications</span>
+                    </div>
+                    <select id="notificationSoundSetting" class="setting-select">
+                        <option value="default">Default</option>
+                        <option value="soft">Soft</option>
+                        <option value="alert">Alert</option>
+                    </select>
+                </div>
+            </div>
+            
+            <!-- Appearance Settings -->
+            <div class="settings-section">
+                <h4>Appearance</h4>
+                <div class="setting-item">
+                    <div class="setting-info">
+                        <span class="setting-label">Theme</span>
+                        <span class="setting-description">Choose your preferred theme</span>
+                    </div>
+                    <select id="themeSetting" class="setting-select">
+                        <option value="dark">Dark</option>
+                        <option value="light">Light</option>
+                        <option value="auto">Auto (System)</option>
+                    </select>
+                </div>
+                
+                <div class="setting-item">
+                    <div class="setting-info">
+                        <span class="setting-label">Message density</span>
+                        <span class="setting-description">Spacing between messages</span>
+                    </div>
+                    <select id="messageDensitySetting" class="setting-select">
+                        <option value="comfortable">Comfortable</option>
+                        <option value="compact">Compact</option>
+                    </select>
+                </div>
+            </div>
+            
+            <!-- Privacy Settings -->
+            <div class="settings-section">
+                <h4>Privacy</h4>
+                <div class="setting-item">
+                    <div class="setting-info">
+                        <span class="setting-label">Read receipts</span>
+                        <span class="setting-description">Show when you've read messages</span>
+                    </div>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="readReceiptsSetting" checked>
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
+                
+                <div class="setting-item">
+                    <div class="setting-info">
+                        <span class="setting-label">Online status</span>
+                        <span class="setting-description">Show when you're online</span>
+                    </div>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="onlineStatusSetting" checked>
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
+            </div>
+            
+            <!-- Account Settings -->
+            <div class="settings-section">
+                <h4>Account</h4>
+                <div class="setting-item">
+                    <div class="setting-info">
+                        <span class="setting-label">Username</span>
+                        <span class="setting-description" id="currentUsernameDisplay"></span>
+                    </div>
+                    <button class="btn btn-secondary btn-sm" onclick="showChangeUsername()">Change</button>
+                </div>
+                
+                <div class="setting-item">
+                    <div class="setting-info">
+                        <span class="setting-label">Email</span>
+                        <span class="setting-description" id="currentEmailDisplay"></span>
+                    </div>
+                    <button class="btn btn-secondary btn-sm" onclick="showChangeEmail()">Change</button>
+                </div>
+            </div>
+            
+            <!-- Danger Zone -->
+            <div class="settings-section danger-zone">
+                <h4>Danger Zone</h4>
+                <div class="setting-item">
+                    <div class="setting-info">
+                        <span class="setting-label">Clear all data</span>
+                        <span class="setting-description">Delete all your messages and chats</span>
+                    </div>
+                    <button class="btn btn-danger btn-sm" onclick="showClearDataConfirm()">Clear Data</button>
+                </div>
+                
+                <div class="setting-item">
+                    <div class="setting-info">
+                        <span class="setting-label">Delete account</span>
+                        <span class="setting-description">Permanently delete your account</span>
+                    </div>
+                    <button class="btn btn-danger btn-sm" onclick="showDeleteAccountConfirm()">Delete Account</button>
+                </div>
+            </div>
+        </div>
+        
+        <div class="modal-actions">
+            <button class="btn btn-primary" onclick="saveSettings()">Save Changes</button>
+            <button class="btn btn-secondary" onclick="closeSettings()">Cancel</button>
+        </div>
+    </div>
+</div>
+
+<!-- Confirmation Modals -->
+<div id="clearDataModal" class="modal hidden">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>Clear All Data</h3>
+            <span class="close" onclick="closeClearDataModal()">&times;</span>
+        </div>
+        <div class="confirmation-message">
+            <p>Are you sure you want to clear all your data? This action cannot be undone.</p>
+            <p><strong>This will delete:</strong></p>
+            <ul>
+                <li>All your messages</li>
+                <li>All your chats</li>
+                <li>All your settings</li>
+            </ul>
+        </div>
+        <div class="modal-actions">
+            <button class="btn btn-danger" onclick="clearAllData()">Yes, Clear All Data</button>
+            <button class="btn btn-secondary" onclick="closeClearDataModal()">Cancel</button>
+        </div>
+    </div>
+</div>
+
+<div id="deleteAccountModal" class="modal hidden">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>Delete Account</h3>
+            <span class="close" onclick="closeDeleteAccountModal()">&times;</span>
+        </div>
+        <div class="confirmation-message">
+            <p>Are you sure you want to delete your account? This action cannot be undone.</p>
+            <p><strong>This will permanently:</strong></p>
+            <ul>
+                <li>Delete your account</li>
+                <li>Remove you from all chats</li>
+                <li>Delete all your messages</li>
+                <li>Remove all your data</li>
+            </ul>
+        </div>
+        <div class="modal-actions">
+            <button class="btn btn-danger" onclick="deleteAccount()">Yes, Delete Account</button>
+            <button class="btn btn-secondary" onclick="closeDeleteAccountModal()">Cancel</button>
+        </div>
+    </div>
+</div>
+</div>
 </body>
 </html>

@@ -18,6 +18,9 @@ class ChatApp {
         this.websocketService = new WebSocketService(this);
         this.chatManager = new ChatManager(this);
         this.authManager = new AuthManager(this);
+        this.soundManager = new SoundManager();
+        this.unreadMessages = new Map()
+        this.settingsManager = new SettingsManager(this);
         
         this.init();
     }
@@ -25,6 +28,8 @@ class ChatApp {
     init() {
         this.setupEventListeners();
         this.checkExistingSession();
+        this.setupSoundControls();
+        this.settingsManager.init();
     }
 
     setupEventListeners() {
@@ -84,6 +89,182 @@ class ChatApp {
         localStorage.removeItem('chatUsername');
         this.uiManager.showAuth();
         this.uiManager.clearChatUI();
+    }
+
+    markMessagesAsRead(chatId) {
+        if (chatId && this.unreadMessages.has(chatId)) {
+            this.unreadMessages.set(chatId, 0);
+            this.updateUnreadBadge(chatId);
+        }
+    }
+
+    incrementUnreadCount(chatId) {
+        const current = this.unreadMessages.get(chatId) || 0;
+        this.unreadMessages.set(chatId, current + 1);
+        this.updateUnreadBadge(chatId);
+    }
+
+    updateUnreadBadge(chatId) {
+        const count = this.unreadMessages.get(chatId) || 0;
+        const contactElement = document.querySelector(`[data-chat-id="${chatId}"]`);
+        
+        if (contactElement) {
+            let badge = contactElement.querySelector('.unread-badge');
+            
+            if (count > 0) {
+                if (!badge) {
+                    badge = document.createElement('span');
+                    badge.className = 'unread-badge';
+                    contactElement.querySelector('.contact-info').appendChild(badge);
+                }
+                badge.textContent = count > 99 ? '99+' : count.toString();
+            } else if (badge) {
+                badge.remove();
+            }
+        }
+    }
+
+    setupSoundControls() {
+        const soundToggle = document.getElementById('soundToggle');
+        if (soundToggle) {
+            soundToggle.addEventListener('click', () => {
+                this.soundManager.toggleMute();
+                soundToggle.classList.toggle('muted');
+                soundToggle.innerHTML = this.soundManager.isMuted ? '🔕' : '🔔';
+            });
+        }
+    }
+
+    showSettings() {
+        this.settingsManager.showSettings();
+    }
+}
+
+class SoundManager {
+    constructor() {
+        this.isMuted = false;
+        this.audioContext = null;
+        this.sounds = {
+            send: () => this.playTone(523.25, 0.1, 'sine', 0.2),
+            receive: () => this.playTone(659.25, 0.15, 'sine', 0.25), 
+            notification: () => this.playNotificationSound() 
+        };
+    }
+
+    initAudioContext() {
+        if (!this.audioContext) {
+            this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        return this.audioContext;
+    }
+
+    playTone(frequency, duration, type = 'sine', volume = 0.3) {
+        if (this.isMuted) return;
+        
+        try {
+            const context = this.initAudioContext();
+            const oscillator = context.createOscillator();
+            const gainNode = context.createGain();
+            
+            oscillator.connect(gainNode);
+            gainNode.connect(context.destination);
+            
+            oscillator.frequency.setValueAtTime(frequency, context.currentTime);
+            oscillator.type = type;
+            
+            gainNode.gain.setValueAtTime(0, context.currentTime);
+            gainNode.gain.linearRampToValueAtTime(volume, context.currentTime + 0.02);
+            gainNode.gain.exponentialRampToValueAtTime(0.001, context.currentTime + duration);
+            
+            oscillator.start(context.currentTime);
+            oscillator.stop(context.currentTime + duration);
+            
+        } catch (error) {
+            console.warn('Audio context error:', error);
+        }
+    }
+
+    playNotificationSound() {
+        if (this.isMuted) return;
+        
+        try {
+            const context = this.initAudioContext();
+            const now = context.currentTime;
+            
+            const frequencies = [659.25, 783.99, 1046.50]; // Ми, Соль, До
+            const durations = [0.1, 0.1, 0.2];
+            
+            frequencies.forEach((freq, index) => {
+                const oscillator = context.createOscillator();
+                const gainNode = context.createGain();
+                
+                oscillator.connect(gainNode);
+                gainNode.connect(context.destination);
+                
+                oscillator.frequency.setValueAtTime(freq, now + index * 0.08);
+                oscillator.type = 'sine';
+                
+                gainNode.gain.setValueAtTime(0, now + index * 0.08);
+                gainNode.gain.linearRampToValueAtTime(0.2, now + index * 0.08 + 0.02);
+                gainNode.gain.exponentialRampToValueAtTime(0.001, now + index * 0.08 + durations[index]);
+                
+                oscillator.start(now + index * 0.08);
+                oscillator.stop(now + index * 0.08 + durations[index]);
+            });
+            
+        } catch (error) {
+            console.warn('Notification sound error:', error);
+        }
+    }
+
+    playBellSound() {
+        if (this.isMuted) return;
+        
+        try {
+            const context = this.initAudioContext();
+            const now = context.currentTime;
+            
+            const oscillator = context.createOscillator();
+            const gainNode = context.createGain();
+            const filter = context.createBiquadFilter();
+            
+            oscillator.connect(filter);
+            filter.connect(gainNode);
+            gainNode.connect(context.destination);
+            
+            oscillator.type = 'sine';
+            oscillator.frequency.setValueAtTime(800, now);
+            oscillator.frequency.exponentialRampToValueAtTime(400, now + 0.3);
+            
+            filter.type = 'bandpass';
+            filter.frequency.setValueAtTime(1000, now);
+            filter.Q.setValueAtTime(1, now);
+            
+            gainNode.gain.setValueAtTime(0, now);
+            gainNode.gain.linearRampToValueAtTime(0.15, now + 0.05);
+            gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
+            
+            oscillator.start(now);
+            oscillator.stop(now + 0.5);
+            
+        } catch (error) {
+            console.warn('Bell sound error:', error);
+        }
+    }
+
+    play(soundName) {
+        if (this.isMuted || !this.sounds[soundName]) return;
+        this.sounds[soundName]();
+    }
+
+    toggleMute() {
+        this.isMuted = !this.isMuted;
+        localStorage.setItem('chatSoundsMuted', this.isMuted);
+    }
+
+    loadMuteSetting() {
+        const saved = localStorage.getItem('chatSoundsMuted');
+        this.isMuted = saved === 'true';
     }
 }
 
@@ -341,12 +522,17 @@ class UIManager {
                 `${lastMessage.sender}: ${this.truncateText(lastMessage.content, 30)}` : 
                 'No messages yet';
 
+            const unreadCount = app.unreadMessages.get(chat.id) || 0;
+            const unreadBadge = unreadCount > 0 ? 
+                `<span class="unread-badge">${unreadCount > 99 ? '99+' : unreadCount}</span>` : 
+                '';
+
             return this.safeHTML`
                 <div class="contact" data-chat-id="${chat.id}">
                     <div class="contact-avatar">${displayName.charAt(0)}</div>
                     <div class="contact-info">
                         <h3>${displayName}</h3>
-                        <p>${lastMessageText}</p>
+                        <p>${lastMessageText} ${unreadBadge}</p>
                     </div>
                     <button class="delete-chat-btn" 
                             onclick="event.stopPropagation(); app.chatManager.confirmDeleteChat('${chat.id}', '${this.escapeString(displayName)}')">
@@ -364,7 +550,10 @@ class UIManager {
                 `Chat with ${chat.members?.filter(m => m !== currentUsername).join(', ') || 'others'}`;
             const element = container.querySelector(`[data-chat-id="${chat.id}"]`);
             if (element) {
-                element.addEventListener('click', () => onChatSelect(chat.id, displayName, chat));
+                element.addEventListener('click', () => {
+                    app.markMessagesAsRead(chat.id);
+                    onChatSelect(chat.id, displayName, chat);
+                });
             }
         });
     }
@@ -749,6 +938,8 @@ class ChatManager {
     }
 
     async selectChat(chatId, chatName, chatInfo) {
+        this.app.markMessagesAsRead(chatId);
+        
         this.app.setState({
             currentChatId: chatId,
             currentChatInfo: chatInfo
@@ -819,6 +1010,8 @@ class ChatManager {
                 content: message,
                 sender: this.app.state.username
             });
+            
+            this.app.soundManager.play('send');
             input.value = '';
         } catch (error) {
             this.app.uiManager.showNotification(`Failed to send message: ${error.message}`, 'error');
@@ -826,13 +1019,16 @@ class ChatManager {
     }
 
     handleNewMessage(message) {
-        if (message.chat_id) {
-            // Update last messages cache
-            this.app.state.lastMessagesCache.set(message.chat_id, message);
-            this.app.uiManager.updateChatLastMessage(message.chat_id, message, this.app.state.username);
+        if (this.app.state.currentChatId !== message.chat_id) {
+            this.app.incrementUnreadCount(message.chat_id);
+            this.app.soundManager.play('receive');
+        } else {
+            this.app.soundManager.play('send');
         }
+
+        this.app.state.lastMessagesCache.set(message.chat_id, message);
+        this.app.uiManager.updateChatLastMessage(message.chat_id, message, this.app.state.username);
         
-        // If message is for current chat, display it
         if (this.app.state.currentChatId && message.chat_id === this.app.state.currentChatId) {
             const messagesContainer = this.app.uiManager.elements.chatMessages;
             const isOwn = message.sender === this.app.state.username;
@@ -1185,6 +1381,192 @@ class AuthManager {
     }
 }
 
+class SettingsManager {
+    constructor(app) {
+        this.app = app;
+        this.settings = {
+            sounds: {
+                enabled: true,
+                messageSound: 'default',
+                notificationSound: 'default'
+            },
+            appearance: {
+                theme: 'dark',
+                messageDensity: 'comfortable'
+            },
+            privacy: {
+                readReceipts: true,
+                onlineStatus: true
+            }
+        };
+    }
+
+    init() {
+        this.loadSettings();
+        this.applySettings();
+    }
+
+    loadSettings() {
+        const saved = localStorage.getItem('chatSettings');
+        if (saved) {
+            try {
+                this.settings = { ...this.settings, ...JSON.parse(saved) };
+            } catch (error) {
+                console.warn('Failed to load settings:', error);
+            }
+        }
+    }
+
+    saveSettings() {
+        try {
+            localStorage.setItem('chatSettings', JSON.stringify(this.settings));
+            this.applySettings();
+            return true;
+        } catch (error) {
+            console.error('Failed to save settings:', error);
+            return false;
+        }
+    }
+
+    applySettings() {
+        // Apply sound settings
+        this.app.soundManager.isMuted = !this.settings.sounds.enabled;
+        this.updateSoundToggle();
+
+        // Apply theme
+        this.applyTheme(this.settings.appearance.theme);
+
+        // Apply message density
+        this.applyMessageDensity(this.settings.appearance.messageDensity);
+    }
+
+    applyTheme(theme) {
+        const root = document.documentElement;
+        
+        if (theme === 'light') {
+            root.style.setProperty('--primary-bg', '#ffffff');
+            root.style.setProperty('--secondary-bg', '#f8fafc');
+            root.style.setProperty('--tertiary-bg', '#f1f5f9');
+            root.style.setProperty('--text-primary', '#1e293b');
+            root.style.setProperty('--text-secondary', '#475569');
+            root.style.setProperty('--text-tertiary', '#64748b');
+            root.style.setProperty('--border-primary', '#e2e8f0');
+            root.style.setProperty('--border-secondary', '#cbd5e1');
+        } else {
+            // Reset to dark theme
+            root.style.setProperty('--primary-bg', '#0a0a0f');
+            root.style.setProperty('--secondary-bg', '#151520');
+            root.style.setProperty('--tertiary-bg', '#1e1e2d');
+            root.style.setProperty('--text-primary', '#f8fafc');
+            root.style.setProperty('--text-secondary', '#cbd5e1');
+            root.style.setProperty('--text-tertiary', '#94a3b8');
+            root.style.setProperty('--border-primary', '#334155');
+            root.style.setProperty('--border-secondary', '#475569');
+        }
+    }
+
+    applyMessageDensity(density) {
+        const messages = document.querySelectorAll('.message');
+        const gap = density === 'compact' ? 'var(--space-md)' : 'var(--space-lg)';
+        
+        document.querySelector('.chat-messages').style.gap = gap;
+    }
+
+    updateSoundToggle() {
+        const soundToggle = document.getElementById('soundToggle');
+        if (soundToggle) {
+            soundToggle.classList.toggle('muted', this.app.soundManager.isMuted);
+            soundToggle.innerHTML = this.app.soundManager.isMuted ? '🔕' : '🔔';
+        }
+    }
+
+    showSettings() {
+        this.populateSettingsForm();
+        this.app.uiManager.showElement(document.getElementById('settingsModal'));
+    }
+
+    populateSettingsForm() {
+        // Sound settings
+        document.getElementById('soundToggleSetting').checked = this.settings.sounds.enabled;
+        document.getElementById('messageSoundSetting').value = this.settings.sounds.messageSound;
+        document.getElementById('notificationSoundSetting').value = this.settings.sounds.notificationSound;
+
+        // Appearance settings
+        document.getElementById('themeSetting').value = this.settings.appearance.theme;
+        document.getElementById('messageDensitySetting').value = this.settings.appearance.messageDensity;
+
+        // Privacy settings
+        document.getElementById('readReceiptsSetting').checked = this.settings.privacy.readReceipts;
+        document.getElementById('onlineStatusSetting').checked = this.settings.privacy.onlineStatus;
+
+        // Account info
+        document.getElementById('currentUsernameDisplay').textContent = this.app.state.username;
+        // Email would come from the server in a real app
+        document.getElementById('currentEmailDisplay').textContent = 'user@example.com';
+    }
+
+    getSettingsFromForm() {
+        return {
+            sounds: {
+                enabled: document.getElementById('soundToggleSetting').checked,
+                messageSound: document.getElementById('messageSoundSetting').value,
+                notificationSound: document.getElementById('notificationSoundSetting').value
+            },
+            appearance: {
+                theme: document.getElementById('themeSetting').value,
+                messageDensity: document.getElementById('messageDensitySetting').value
+            },
+            privacy: {
+                readReceipts: document.getElementById('readReceiptsSetting').checked,
+                onlineStatus: document.getElementById('onlineStatusSetting').checked
+            }
+        };
+    }
+
+    async clearAllData() {
+        try {
+            // Clear local storage
+            localStorage.removeItem('chatToken');
+            localStorage.removeItem('chatUsername');
+            localStorage.removeItem('chatSettings');
+            
+            // Clear app state
+            this.app.setState({
+                token: null,
+                username: null,
+                currentChatId: null,
+                userChats: [],
+                currentChatInfo: null
+            });
+            
+            // Reset settings to default
+            this.settings = {
+                sounds: { enabled: true, messageSound: 'default', notificationSound: 'default' },
+                appearance: { theme: 'dark', messageDensity: 'comfortable' },
+                privacy: { readReceipts: true, onlineStatus: true }
+            };
+            
+            // Update UI
+            this.app.uiManager.showAuth();
+            this.app.uiManager.clearChatUI();
+            this.applySettings();
+            
+            this.app.uiManager.showNotification('All data cleared successfully', 'success');
+            return true;
+        } catch (error) {
+            this.app.uiManager.showNotification('Failed to clear data', 'error');
+            return false;
+        }
+    }
+
+    async deleteAccount() {
+        // In a real app, this would call an API endpoint
+        this.app.uiManager.showNotification('Account deletion would be handled by the server in a real application', 'info');
+        return false;
+    }
+}
+
+
 // Initialize the application
 let app;
 
@@ -1222,4 +1604,46 @@ function createChat() {
 }
 function resendVerification() {
     app.authManager.resendVerification(document.getElementById('registerEmail').value);
+}
+
+function showSettings() { app.settingsManager.showSettings(); }
+function closeSettings() { app.uiManager.hideElement(document.getElementById('settingsModal')); }
+function saveSettings() { 
+    app.settingsManager.settings = app.settingsManager.getSettingsFromForm();
+    if (app.settingsManager.saveSettings()) {
+        app.uiManager.showNotification('Settings saved successfully', 'success');
+        closeSettings();
+    } else {
+        app.uiManager.showNotification('Failed to save settings', 'error');
+    }
+}
+function showClearDataConfirm() { 
+    app.uiManager.hideElement(document.getElementById('settingsModal'));
+    app.uiManager.showElement(document.getElementById('clearDataModal'));
+}
+function closeClearDataModal() { 
+    app.uiManager.hideElement(document.getElementById('clearDataModal'));
+    app.settingsManager.showSettings();
+}
+function clearAllData() { 
+    app.settingsManager.clearAllData();
+    closeClearDataModal();
+}
+function showDeleteAccountConfirm() { 
+    app.uiManager.hideElement(document.getElementById('settingsModal'));
+    app.uiManager.showElement(document.getElementById('deleteAccountModal'));
+}
+function closeDeleteAccountModal() { 
+    app.uiManager.hideElement(document.getElementById('deleteAccountModal'));
+    app.settingsManager.showSettings();
+}
+function deleteAccount() { 
+    app.settingsManager.deleteAccount();
+    closeDeleteAccountModal();
+}
+function showChangeUsername() {
+    app.uiManager.showNotification('Username change would be implemented with server API', 'info');
+}
+function showChangeEmail() {
+    app.uiManager.showNotification('Email change would be implemented with server API', 'info');
 }
